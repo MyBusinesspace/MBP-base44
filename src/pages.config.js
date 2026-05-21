@@ -50,10 +50,8 @@
 import AssetsDocuments from './pages/AssetsDocuments';
 import Dashboard from './pages/Dashboard';
 import Downloads from './pages/Downloads';
-import Forms from './pages/Forms';
 import QuickFiles from './pages/QuickFiles';
 import RecentActivities from './pages/RecentActivities';
-import Reports from './pages/Reports';
 import TimeTrackerSettings from './pages/TimeTrackerSettings';
 import WorkOrderPDFView from './pages/WorkOrderPDFView';
 import WorkOrdersMultiplePDFView from './pages/WorkOrdersMultiplePDFView';
@@ -89,10 +87,10 @@ export const PAGES = {
     "AssetsDocuments": AssetsDocuments,
     "Dashboard": Dashboard,
     "Downloads": Downloads,
-    "Forms": Forms,
+    "Forms": forms,
     "QuickFiles": QuickFiles,
     "RecentActivities": RecentActivities,
-    "Reports": Reports,
+    "Reports": reports,
     "TimeTrackerSettings": TimeTrackerSettings,
     "WorkOrderPDFView": WorkOrderPDFView,
     "WorkOrdersMultiplePDFView": WorkOrdersMultiplePDFView,
