@@ -1,0 +1,374 @@
+{
+  "name": "TimeEntry",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "branch_id": {
+      "type": "string",
+      "description": "Branch this work order belongs to"
+    },
+    "equipment_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of equipment (asset) IDs this work order is associated with"
+    },
+    "work_order_number": {
+      "type": "string",
+      "description": "Unique work order number (e.g., N1, N2, N100)"
+    },
+    "work_order_ref": {
+      "type": "string",
+      "description": "Human-readable reference number e.g. WO-1/25, WO-42/26"
+    },
+    "title": {
+      "type": "string",
+      "description": "Work order name/title"
+    },
+    "planned_start_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Planned/scheduled start time for this work order"
+    },
+    "planned_end_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Planned/scheduled end time for this work order"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Legacy: ID of the task being worked on (duplicated in TimesheetEntry)"
+    },
+    "task": {
+      "type": "string",
+      "description": "Legacy: Name of the task being worked on (duplicated in TimesheetEntry)"
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "employee_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "leader_id": {
+            "type": "string"
+          },
+          "team_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "shift_type_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "completed"
+            ]
+          },
+          "work_done_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          },
+          "spare_parts_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          },
+          "work_pending_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          },
+          "spare_parts_pending_items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          },
+          "other_file_urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "default": []
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed"
+      ],
+      "default": "open"
+    },
+    "closed_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "estimated_duration_hours": {
+      "type": "number"
+    },
+    "work_notes": {
+      "type": "string"
+    },
+    "job_completion_status": {
+      "type": "string",
+      "enum": [
+        "All done",
+        "Pending more work",
+        "Safe to use",
+        "Unsafe to use",
+        "Others"
+      ]
+    },
+    "client_feedback_comments": {
+      "type": "string"
+    },
+    "client_representative_name": {
+      "type": "string"
+    },
+    "client_representative_phone": {
+      "type": "string"
+    },
+    "client_signature_url": {
+      "type": "string"
+    },
+    "task_status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed",
+        "cancelled"
+      ]
+    },
+    "work_order_category_id": {
+      "type": "string"
+    },
+    "archived": {
+      "type": "boolean",
+      "default": false
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_minutes": {
+      "type": "number"
+    },
+    "start_coords": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number"
+        },
+        "lon": {
+          "type": "number"
+        }
+      }
+    },
+    "end_coords": {
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number"
+        },
+        "lon": {
+          "type": "number"
+        }
+      }
+    },
+    "start_address": {
+      "type": "string"
+    },
+    "end_address": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_urgent": {
+      "type": "boolean",
+      "default": false
+    },
+    "file_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of URLs for working reports/forms attached to this work order."
+    },
+    "file_urls_meta": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "upload_date": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Metadata (title, upload_date, notes) for each file in file_urls"
+    },
+    "other_file_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of URLs for other photos/documents attached to this work order (WO level)."
+    },
+    "other_file_urls_meta": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "upload_date": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Metadata (title, upload_date, notes) for each file in other_file_urls"
+    },
+    "breaks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "is_payable": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    "updated_by": {
+      "type": "string"
+    },
+    "activity_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "Created",
+              "Edited",
+              "Copied",
+              "Pasted",
+              "Dropped",
+              "Archived"
+            ]
+          },
+          "user_email": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "is_repeating": {
+      "type": "boolean",
+      "default": false
+    },
+    "recurrence_type": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "yearly"
+      ]
+    },
+    "recurrence_interval": {
+      "type": "number",
+      "default": 1
+    },
+    "recurrence_end_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "skip_weekends": {
+      "type": "boolean",
+      "default": false
+    },
+    "moved_from_sunday": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

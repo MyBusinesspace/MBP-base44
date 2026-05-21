@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mpb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mpb
+      POSTGRES_PASSWORD: mpb_local
+      POSTGRES_DB: mpb_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - mpb_pg_data:/var/lib/postgresql/data
+
+volumes:
+  mpb_pg_data:

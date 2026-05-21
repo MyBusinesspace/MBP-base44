@@ -1,0 +1,217 @@
+import { Router } from 'express';
+import { OAuth2Client } from 'google-auth-library';
+import { randomUUID } from 'crypto';
+import { env } from '../config/env.js';
+import { signToken } from '../auth/token.js';
+import { resolveRequestUser } from '../middleware/authenticate.js';
+import { listEntities, createEntity, updateEntity } from '../entityStore.js';
+import { getDefaultBranchId } from '../auth/branch.js';
+import { hashPassword, verifyPassword, stripSensitiveUser } from '../auth/password.js';
+
+const router = Router();
+
+function getOAuthClient() {
+  if (!env.googleOAuthClientId || !env.googleOAuthClientSecret) {
+    return null;
+  }
+  return new OAuth2Client(
+    env.googleOAuthClientId,
+    env.googleOAuthClientSecret,
+    env.googleOAuthCallbackUrl
+  );
+}
+
+async function findUserByEmail(email) {
+  const normalized = email?.toLowerCase()?.trim();
+  if (!normalized) return null;
+  const users = await listEntities('User', { query: { email: normalized }, limit: 1 });
+  return users[0] || null;
+}
+
+function issueAuthResponse(user) {
+  const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
+  return {
+    success: true,
+    token,
+    user: stripSensitiveUser(user),
+  };
+}
+
+async function upsertGoogleUser(profile) {
+  const email = profile.email?.toLowerCase();
+  if (!email) throw new Error('Google account has no email');
+
+  let user = await findUserByEmail(email);
+  const branchId = await getDefaultBranchId();
+  const now = new Date().toISOString();
+
+  if (user) {
+    user = await updateEntity('User', user.id, {
+      full_name: profile.name || user.full_name,
+      avatar_url: profile.picture || user.avatar_url,
+      last_login: now,
+    });
+    return user;
+  }
+
+  return createEntity('User', {
+    id: randomUUID(),
+    email,
+    full_name: profile.name || email.split('@')[0],
+    role: 'user',
+    branch_id: branchId,
+    company_id: branchId,
+    sort_order: 999,
+    archived: false,
+    avatar_url: profile.picture || null,
+    last_login: now,
+    status: 'Active',
+  });
+}
+
+router.get('/status', (_req, res) => {
+  res.json({
+    auth_required: env.authRequired,
+    google_login_enabled: Boolean(env.googleOAuthClientId),
+    email_login_enabled: true,
+  });
+});
+
+router.get('/me', async (req, res) => {
+  const user = await resolveRequestUser(req);
+  if (!user) {
+    if (!env.googleOAuthClientId) {
+      const { getDevUser } = await import('../entityStore.js');
+      return res.json(getDevUser());
+    }
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  res.json(stripSensitiveUser(user));
+});
+
+router.post('/login', async (req, res) => {
+  try {
+    const email = req.body?.email;
+    const password = req.body?.password;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required', success: false });
+    }
+
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password', success: false });
+    }
+
+    if (user.archived) {
+      return res.status(403).json({ error: 'User account is archived', success: false });
+    }
+
+    if (!user.password || !verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid email or password', success: false });
+    }
+
+    const updated = await updateEntity('User', user.id, {
+      last_login: new Date().toISOString(),
+    });
+
+    return res.json(issueAuthResponse(updated));
+  } catch (e) {
+    console.error('[auth/login]', e.message);
+    return res.status(500).json({ error: e.message, success: false });
+  }
+});
+
+router.post('/register', async (req, res) => {
+  try {
+    const email = req.body?.email?.toLowerCase()?.trim();
+    const password = req.body?.password;
+    const fullName = req.body?.full_name?.trim();
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required', success: false });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters', success: false });
+    }
+
+    const existing = await findUserByEmail(email);
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this email already exists', success: false });
+    }
+
+    const branchId = await getDefaultBranchId();
+    const user = await createEntity('User', {
+      id: randomUUID(),
+      email,
+      full_name: fullName || email.split('@')[0],
+      role: 'user',
+      branch_id: branchId,
+      company_id: branchId,
+      sort_order: 999,
+      archived: false,
+      password: hashPassword(password),
+      status: 'Active',
+      last_login: new Date().toISOString(),
+    });
+
+    return res.status(201).json(issueAuthResponse(user));
+  } catch (e) {
+    console.error('[auth/register]', e.message);
+    return res.status(500).json({ error: e.message, success: false });
+  }
+});
+
+router.get('/google', (_req, res) => {
+  const client = getOAuthClient();
+  if (!client) {
+    return res.status(503).json({
+      error: 'Google login is not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in .env',
+    });
+  }
+
+  const url = client.generateAuthUrl({
+    access_type: 'online',
+    prompt: 'select_account',
+    scope: ['openid', 'email', 'profile'],
+  });
+  res.redirect(url);
+});
+
+router.get('/google/callback', async (req, res) => {
+  const client = getOAuthClient();
+  if (!client) {
+    return res.redirect(`${env.webUrl}/?auth_error=google_not_configured`);
+  }
+
+  const code = req.query.code;
+  if (!code) {
+    return res.redirect(`${env.webUrl}/?auth_error=missing_code`);
+  }
+
+  try {
+    const { tokens } = await client.getToken(String(code));
+    client.setCredentials(tokens);
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: env.googleOAuthClientId,
+    });
+
+    const profile = ticket.getPayload();
+    const user = await upsertGoogleUser(profile);
+    const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
+
+    res.redirect(`${env.webUrl}/?auth_token=${encodeURIComponent(token)}`);
+  } catch (e) {
+    console.error('[auth/google/callback]', e.message);
+    res.redirect(`${env.webUrl}/?auth_error=${encodeURIComponent(e.message)}`);
+  }
+});
+
+router.post('/logout', (_req, res) => {
+  res.json({ success: true });
+});
+
+export default router;

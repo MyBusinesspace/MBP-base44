@@ -1,0 +1,44 @@
+{
+  "name": "OvertimeRulePeriod",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the rule period (e.g., 'Ramadan 2026')"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Start date of the special rule period"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "End date of the special rule period"
+    },
+    "regular_hours_per_day": {
+      "type": "number",
+      "description": "Regular hours per day for this period (e.g., 6 for Ramadan)"
+    },
+    "non_payable_overtime_hours": {
+      "type": "number",
+      "default": 0,
+      "description": "Non-payable overtime hours for this period"
+    },
+    "overtime_multiplier": {
+      "type": "number",
+      "default": 1.5,
+      "description": "Overtime pay rate multiplier for this period"
+    },
+    "branch_id": {
+      "type": "string",
+      "description": "Optional: limit this rule to a specific branch"
+    }
+  },
+  "required": [
+    "name",
+    "start_date",
+    "end_date",
+    "regular_hours_per_day"
+  ]
+}
