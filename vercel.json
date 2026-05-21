@@ -5,15 +5,16 @@
   "installCommand": "npm install",
   "framework": null,
   "functions": {
-    "api/handler.js": {
-      "maxDuration": 30
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "server/**"
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/handler" },
-    { "source": "/apps/(.*)", "destination": "/api/handler" },
-    { "source": "/uploads/(.*)", "destination": "/api/handler" },
-    { "source": "/health", "destination": "/api/handler" },
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/apps/(.*)", "destination": "/api" },
+    { "source": "/uploads/(.*)", "destination": "/api" },
+    { "source": "/health", "destination": "/api" },
     { "source": "/((?!api/|apps/|uploads/|health|assets/).*)", "destination": "/index.html" }
   ]
 }

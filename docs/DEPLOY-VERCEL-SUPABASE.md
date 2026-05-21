@@ -74,13 +74,24 @@ vercel --prod
 | `JWT_SECRET` | سلسلة عشوائية طويلة | مطلوب |
 | `AUTH_REQUIRED` | `true` | |
 | `WEB_URL` | `https://your-app.vercel.app` | بدون `/` في النهاية |
-| `GOOGLE_OAUTH_CLIENT_ID` | من Google Console | **بدون** VITE_ |
+| `GOOGLE_OAUTH_CLIENT_ID` | من Google Console | للخادم — **بدون** VITE_ |
+| `VITE_GOOGLE_OAUTH_CLIENT_ID` | **نفس قيمة** Client ID أعلاه | للواجهة عند **البناء** (يظهر زر Google) |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | من Google Console | **بدون** VITE_ |
 | `GOOGLE_OAUTH_CALLBACK_URL` | `https://your-app.vercel.app/api/auth/google/callback` | |
 | `GOOGLE_PLACES_API_KEY` | اختياري | |
 | `DAILY_API_KEY` | اختياري | |
 
 بعد إضافة المتغيرات: **Redeploy** (Deployments → ⋮ → Redeploy) — التغييرات لا تُطبَّق على نشر قديم.
+
+### خطأ `getaddrinfo ENOTFOUND db.xxx`
+
+`DATABASE_URL` غير صحيح في Vercel. انسخ **Connection string → URI** من Supabase (Transaction pooler, port **6543**) واستبدل كلمة المرور الحقيقية — لا تترك `[YOUR-PASSWORD]` في النص.
+
+### خطأ `500 FUNCTION_INVOCATION_FAILED`
+
+1. تأكد أن آخر كود مُرفوع إلى GitHub (إصلاح `api/index.js` + `uploads`)
+2. **Redeploy** بعد تغيير Environment Variables
+3. راجع **Logs → Functions** في Vercel لرسالة الخطأ الدقيقة
 
 ### التحقق من المتغيرات
 

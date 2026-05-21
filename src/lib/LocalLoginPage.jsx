@@ -153,7 +153,10 @@ export default function LocalLoginPage({ googleEnabled, authError, onDevLogin, o
           </Button>
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Google login is not configured in <code className="text-xs">.env</code>.
+            Google login is not enabled. On Vercel add{' '}
+            <code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code> and{' '}
+            <code className="text-xs">VITE_GOOGLE_OAUTH_CLIENT_ID</code> (same value) in
+            Environment Variables, then <strong>Redeploy</strong>.
           </div>
         )}
 

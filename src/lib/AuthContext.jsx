@@ -47,8 +47,11 @@ export const AuthProvider = ({ children }) => {
     appPublicSettings?.public_settings?.google_login_enabled ??
     false;
 
+  /** Build-time flag (Vercel: set VITE_GOOGLE_OAUTH_CLIENT_ID in env for production build) */
+  const googleFromBuild = Boolean(import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID);
+
   const googleEnabled =
-    appPublicSettings?.public_settings?.google_login_enabled ?? false;
+    appPublicSettings?.public_settings?.google_login_enabled ?? googleFromBuild;
 
   const applyLocalUser = useCallback((currentUser = LOCAL_DEV_USER) => {
     setUser(currentUser);
@@ -138,10 +141,22 @@ export const AuthProvider = ({ children }) => {
       );
       setAppPublicSettings(publicSettings);
     } catch (error) {
-      console.warn('Public settings unavailable, using local defaults:', error.message);
+      console.warn('Public settings unavailable:', error.message);
+      let googleLogin = googleFromBuild;
+      let authRequired = false;
+      try {
+        const status = await http.get('/api/auth/status');
+        googleLogin = status.google_login_enabled ?? googleLogin;
+        authRequired = status.auth_required ?? authRequired;
+      } catch {
+        /* API may be down */
+      }
       publicSettings = {
         id: appParams.appId,
-        public_settings: { auth_required: false, google_login_enabled: false },
+        public_settings: {
+          auth_required: authRequired,
+          google_login_enabled: googleLogin,
+        },
       };
       setAppPublicSettings(publicSettings);
     }
@@ -149,7 +164,7 @@ export const AuthProvider = ({ children }) => {
     const required = publicSettings?.public_settings?.auth_required ?? false;
     await checkUserAuth({ authRequired: required });
     setIsLoadingPublicSettings(false);
-  }, [checkUserAuth]);
+  }, [checkUserAuth, googleFromBuild]);
 
   useEffect(() => {
     checkAppState();

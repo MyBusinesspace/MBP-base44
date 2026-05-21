@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generateFullSchemaSQL } from './schemaGenerator.js';
 
-dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
+}
 
 const { Pool } = pg;
 
@@ -40,13 +42,25 @@ export async function testConnection() {
 
 /** Local: run migrations on boot. Vercel/Supabase: run `npm run db:setup` once manually. */
 export async function initDatabase() {
+  const url = process.env.DATABASE_URL || '';
+  if (!url || url.includes('[') || url.includes('YOUR-PASSWORD')) {
+    console.error('[db] Invalid DATABASE_URL — set Supabase URI in Vercel Environment Variables');
+    return false;
+  }
+
   const skipBootSchema =
     process.env.SKIP_SCHEMA_ON_BOOT === 'true' ||
     process.env.VERCEL === '1' ||
-    process.env.VERCEL === 'true';
+    process.env.VERCEL === 'true' ||
+    Boolean(process.env.VERCEL_ENV);
 
-  if (!skipBootSchema) {
-    await runSchema();
+  try {
+    if (!skipBootSchema) {
+      await runSchema();
+    }
+    return await testConnection();
+  } catch (e) {
+    console.error('[db]', e.message);
+    return false;
   }
-  return testConnection();
 }

@@ -80,6 +80,14 @@ export function createApp() {
 
   app.use((err, _req, res, _next) => {
     console.error(err);
+    const code = err.code || err.errno;
+    if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+      return res.status(503).json({
+        message: 'Database connection failed',
+        detail: err.message,
+        hint: 'Set a valid Supabase DATABASE_URL in Vercel Environment Variables (pooler port 6543)',
+      });
+    }
     res.status(err.status || 500).json({ message: err.message || 'Internal error' });
   });
 
