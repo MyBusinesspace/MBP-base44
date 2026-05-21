@@ -34,6 +34,20 @@ export default defineConfig(({ mode }) => {
           }
         },
       },
+      /** Linux/Vercel: pages.config may import ./pages/Forms but file is forms.jsx */
+      {
+        name: 'page-case-shims',
+        enforce: 'pre',
+        resolveId(source, importer) {
+          if (!importer?.includes('pages.config')) return null
+          const map = {
+            './pages/Forms': resolve(__dirname, 'src/pages/forms.jsx'),
+            './pages/Reports': resolve(__dirname, 'src/pages/reports.jsx'),
+          }
+          if (map[source]) return map[source]
+          return null
+        },
+      },
     ],
     server: {
       proxy: {
