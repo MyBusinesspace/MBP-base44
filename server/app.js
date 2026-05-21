@@ -1,30 +1,26 @@
 import express from 'express';
 import cors from 'cors';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync, mkdirSync } from 'fs';
-
 import { testConnection } from './db.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
 import authRoutes from './routes/auth.js';
 import { env } from './config/env.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { getUploadsDir, ensureUploadsDir } from './utils/uploadsPath.js';
 
 export function createApp() {
   const APP_ID = process.env.VITE_APP_ID || 'mpb-local';
   const WEB_PORT = process.env.WEB_PORT || '5173';
 
-  const uploadsDir = join(__dirname, 'uploads');
-  if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+  const uploadsDir = ensureUploadsDir(getUploadsDir());
 
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true }));
-  app.use('/uploads', express.static(uploadsDir));
+  if (uploadsDir) {
+    app.use('/uploads', express.static(uploadsDir));
+  }
 
   app.get('/', (_req, res) => {
     res.type('html').send(`<!DOCTYPE html>
@@ -70,11 +66,15 @@ export function createApp() {
 
   app.get('/api/config/status', (_req, res) => {
     res.json({
+      runtime: env.isVercel ? 'vercel' : 'local',
       google_maps: Boolean(env.googlePlacesApiKey),
+      google_oauth: Boolean(env.googleOAuthClientId),
       daily_video: Boolean(env.dailyApiKey),
       customers_api: Boolean(env.customersApiKey),
       zapier: Boolean(env.zapierWebhookUrl),
       database: env.databaseUrl ? 'configured' : 'missing',
+      jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
+      web_url: env.webUrl,
     });
   });
 

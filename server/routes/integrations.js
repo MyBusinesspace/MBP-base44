@@ -1,31 +1,37 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { mkdirSync, existsSync } from 'fs';
-import { join, extname } from 'path';
+import { extname } from 'path';
 import { randomUUID } from 'crypto';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { getUploadsDir, ensureUploadsDir } from '../utils/uploadsPath.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uploadsDir = join(__dirname, '..', 'uploads');
+let uploadMiddleware;
 
-if (!existsSync(uploadsDir)) {
-  mkdirSync(uploadsDir, { recursive: true });
+function getUploadMiddleware() {
+  if (uploadMiddleware) return uploadMiddleware;
+
+  const uploadsDir = ensureUploadsDir(getUploadsDir());
+
+  if (uploadsDir) {
+    const storage = multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadsDir),
+      filename: (_req, file, cb) => {
+        const ext = extname(file.originalname) || '';
+        cb(null, `${randomUUID()}${ext}`);
+      },
+    });
+    uploadMiddleware = multer({ storage });
+  } else {
+    uploadMiddleware = multer({ storage: multer.memoryStorage() });
+  }
+
+  return uploadMiddleware;
 }
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const ext = extname(file.originalname) || '';
-    cb(null, `${randomUUID()}${ext}`);
-  },
-});
-
-const upload = multer({ storage });
 
 const router = Router({ mergeParams: true });
 
-router.post('/Core/:endpointName', upload.any(), async (req, res) => {
+router.post('/Core/:endpointName', (req, res, next) => {
+  getUploadMiddleware().any()(req, res, next);
+}, async (req, res) => {
   const { endpointName } = req.params;
   const file = req.files?.[0] || req.file;
 
@@ -33,8 +39,22 @@ router.post('/Core/:endpointName', upload.any(), async (req, res) => {
     if (!file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
-    const fileUrl = `/uploads/${file.filename}`;
-    return res.json({ file_url: fileUrl, file_uri: fileUrl });
+
+    if (file.filename) {
+      const fileUrl = `/uploads/${file.filename}`;
+      return res.json({ file_url: fileUrl, file_uri: fileUrl });
+    }
+
+    if (file.buffer) {
+      const dataUrl = `data:${file.mimetype || 'application/octet-stream'};base64,${file.buffer.toString('base64')}`;
+      return res.json({
+        file_url: dataUrl,
+        file_uri: dataUrl,
+        _note: 'File stored in memory on serverless; use Supabase Storage for production persistence.',
+      });
+    }
+
+    return res.status(400).json({ message: 'No file data' });
   }
 
   if (endpointName === 'CreateFileSignedUrl') {

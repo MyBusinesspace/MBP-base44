@@ -61,20 +61,32 @@ vercel --prod
 
 ### متغيرات البيئة في Vercel (Settings → Environment Variables)
 
-| المتغير | القيمة |
-|---------|--------|
-| `DATABASE_URL` | رابط Supabase (pooler 6543) |
-| `SUPABASE_DB` | `true` |
-| `SKIP_SCHEMA_ON_BOOT` | `true` |
-| `VITE_APP_ID` | `mpb-local` أو `mpb-prod` |
-| `JWT_SECRET` | سلسلة عشوائية طويلة |
-| `AUTH_REQUIRED` | `true` |
-| `WEB_URL` | `https://your-app.vercel.app` |
-| `GOOGLE_OAUTH_CLIENT_ID` | من Google Console |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | من Google Console |
-| `GOOGLE_OAUTH_CALLBACK_URL` | `https://your-app.vercel.app/api/auth/google/callback` |
-| `GOOGLE_PLACES_API_KEY` | اختياري |
-| `DAILY_API_KEY` | اختياري |
+> **مهم:** لا تستخدم بادئة `VITE_` إلا لـ `VITE_APP_ID` (للبناء فقط). باقي الأسرار **بدون** `VITE_` لأنها للخادم (Serverless).
+
+فعّل كل متغير لـ **Production** و **Preview** (و Development إن رغبت).
+
+| المتغير | القيمة | ملاحظة |
+|---------|--------|--------|
+| `DATABASE_URL` | رابط Supabase (pooler **6543**) | مطلوب |
+| `SUPABASE_DB` | `true` | مطلوب لـ SSL |
+| `SKIP_SCHEMA_ON_BOOT` | `true` | مطلوب على Vercel |
+| `VITE_APP_ID` | `mpb-local` | للواجهة عند البناء |
+| `JWT_SECRET` | سلسلة عشوائية طويلة | مطلوب |
+| `AUTH_REQUIRED` | `true` | |
+| `WEB_URL` | `https://your-app.vercel.app` | بدون `/` في النهاية |
+| `GOOGLE_OAUTH_CLIENT_ID` | من Google Console | **بدون** VITE_ |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | من Google Console | **بدون** VITE_ |
+| `GOOGLE_OAUTH_CALLBACK_URL` | `https://your-app.vercel.app/api/auth/google/callback` | |
+| `GOOGLE_PLACES_API_KEY` | اختياري | |
+| `DAILY_API_KEY` | اختياري | |
+
+بعد إضافة المتغيرات: **Redeploy** (Deployments → ⋮ → Redeploy) — التغييرات لا تُطبَّق على نشر قديم.
+
+### التحقق من المتغيرات
+
+افتح: `https://your-app.vercel.app/api/config/status`
+
+يجب أن ترى `"google_oauth": true` و `"database": "configured"`.
 
 **Google OAuth:** أضف في Google Console redirect URI للإنتاج:
 ```

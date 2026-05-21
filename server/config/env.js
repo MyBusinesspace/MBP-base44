@@ -2,17 +2,24 @@ import dotenv from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env') });
+// Local: load .env — Vercel injects vars into process.env automatically (no .env file)
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env') });
+}
 
-/**
- * Secrets & API keys (were Base44 function environment variables).
- * Add values to .env in the project root — no frontend code changes needed.
- */
+const vercelHost =
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+  process.env.VERCEL_URL ||
+  '';
+
 const databaseUrl = process.env.DATABASE_URL || '';
 
 export const env = {
   databaseUrl,
-  isVercel: process.env.VERCEL === '1' || process.env.VERCEL === 'true',
+  isVercel:
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL === 'true' ||
+    Boolean(process.env.VERCEL_ENV),
   isSupabase:
     databaseUrl.includes('supabase.com') ||
     databaseUrl.includes('supabase.co') ||
@@ -26,13 +33,13 @@ export const env = {
   googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
   googleOAuthCallbackUrl:
     process.env.GOOGLE_OAUTH_CALLBACK_URL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}/api/auth/google/callback`
+    (vercelHost
+      ? `https://${vercelHost}/api/auth/google/callback`
       : `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`),
   jwtSecret: process.env.JWT_SECRET || 'mpb-local-dev-secret-change-me',
   webUrl:
     process.env.WEB_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173'),
+    (vercelHost ? `https://${vercelHost}` : 'http://localhost:5173'),
   authRequired: process.env.AUTH_REQUIRED !== 'false',
   localAdminPassword: process.env.LOCAL_ADMIN_PASSWORD || 'admin123',
 };
