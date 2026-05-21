@@ -9,10 +9,19 @@ dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env'
 
 const { Pool } = pg;
 
+const connectionString =
+  process.env.DATABASE_URL ||
+  'postgresql://postgres:postgres@localhost:5432/mpb_crm';
+
+const isSupabase =
+  connectionString.includes('supabase.com') ||
+  connectionString.includes('supabase.co') ||
+  process.env.SUPABASE_DB === 'true';
+
 export const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://mpb:mpb_local@localhost:5432/mpb_crm',
+  connectionString,
+  ssl: isSupabase ? { rejectUnauthorized: false } : undefined,
+  max: isSupabase ? 3 : 10,
 });
 
 export async function runSchema() {
@@ -27,4 +36,17 @@ export async function runSchema() {
 export async function testConnection() {
   const r = await pool.query('SELECT 1 AS ok');
   return r.rows[0]?.ok === 1;
+}
+
+/** Local: run migrations on boot. Vercel/Supabase: run `npm run db:setup` once manually. */
+export async function initDatabase() {
+  const skipBootSchema =
+    process.env.SKIP_SCHEMA_ON_BOOT === 'true' ||
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL === 'true';
+
+  if (!skipBootSchema) {
+    await runSchema();
+  }
+  return testConnection();
 }

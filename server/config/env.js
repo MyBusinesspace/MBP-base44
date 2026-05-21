@@ -8,7 +8,15 @@ dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 
  * Secrets & API keys (were Base44 function environment variables).
  * Add values to .env in the project root — no frontend code changes needed.
  */
+const databaseUrl = process.env.DATABASE_URL || '';
+
 export const env = {
+  databaseUrl,
+  isVercel: process.env.VERCEL === '1' || process.env.VERCEL === 'true',
+  isSupabase:
+    databaseUrl.includes('supabase.com') ||
+    databaseUrl.includes('supabase.co') ||
+    process.env.SUPABASE_DB === 'true',
   googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || '',
   dailyApiKey: process.env.DAILY_API_KEY || '',
   customersApiKey: process.env.CUSTOMERS_API_KEY || '',
@@ -18,9 +26,13 @@ export const env = {
   googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
   googleOAuthCallbackUrl:
     process.env.GOOGLE_OAUTH_CALLBACK_URL ||
-    `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`,
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}/api/auth/google/callback`
+      : `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`),
   jwtSecret: process.env.JWT_SECRET || 'mpb-local-dev-secret-change-me',
-  webUrl: process.env.WEB_URL || 'http://localhost:5173',
+  webUrl:
+    process.env.WEB_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173'),
   authRequired: process.env.AUTH_REQUIRED !== 'false',
   localAdminPassword: process.env.LOCAL_ADMIN_PASSWORD || 'admin123',
 };
