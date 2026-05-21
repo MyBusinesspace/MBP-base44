@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { testConnection } from './db.js';
+import { testConnection, getDbConfigError, getSafeDbDiagnostics } from './db.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
@@ -65,6 +65,8 @@ export function createApp() {
   });
 
   app.get('/api/config/status', (_req, res) => {
+    const dbErr = getDbConfigError();
+    const diag = getSafeDbDiagnostics();
     res.json({
       runtime: env.isVercel ? 'vercel' : 'local',
       google_maps: Boolean(env.googlePlacesApiKey),
@@ -72,7 +74,9 @@ export function createApp() {
       daily_video: Boolean(env.dailyApiKey),
       customers_api: Boolean(env.customersApiKey),
       zapier: Boolean(env.zapierWebhookUrl),
-      database: env.databaseUrl ? 'configured' : 'missing',
+      database: dbErr ? 'invalid' : env.databaseUrl ? 'configured' : 'missing',
+      database_error: dbErr,
+      database_host: diag?.host || diag?.error,
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });
@@ -81,6 +85,15 @@ export function createApp() {
   app.use((err, _req, res, _next) => {
     console.error(err);
     const code = err.code || err.errno;
+    const msg = err.message || '';
+    if (msg.includes('Tenant or user not found')) {
+      return res.status(503).json({
+        message: 'Supabase: Tenant or user not found',
+        hint:
+          'Use Connection string → URI (Transaction pooler) from Supabase. Username must be postgres.[project-ref], port 6543.',
+        detail: msg,
+      });
+    }
     if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
       return res.status(503).json({
         message: 'Database connection failed',

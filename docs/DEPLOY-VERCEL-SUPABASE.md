@@ -29,11 +29,14 @@ SUPABASE_DB=true
 على جهازك (PowerShell)، مع رابط Supabase:
 
 ```powershell
-cd "MPB new version deploy"
-$env:DATABASE_URL="postgresql://postgres.xxxxx:PASSWORD@....pooler.supabase.com:6543/postgres"
-$env:SUPABASE_DB="true"
-npm run db:setup
+# يقبل رابط Pooler أو Direct — السكربت يستخدم Direct تلقائياً للـ migrations
+.\scripts\setup-supabase.ps1 "postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+# أو مباشرة من Supabase (Connection string → Direct, port 5432):
+.\scripts\setup-supabase.ps1 "postgresql://postgres:PASSWORD@db.aevwxwintewlcgxwvkrc.supabase.co:5432/postgres"
 ```
+
+> **مهم:** لا تستخدم `npm run db:setup` مع Supabase — يحاول إنشاء قاعدة `mpb_crm` محلياً. استخدم `db:setup:supabase` أو السكربت أعلاه.
 
 هذا ينشئ الجداول ويضيف `admin@local.dev` / `admin123`.
 
@@ -86,6 +89,31 @@ vercel --prod
 ### خطأ `getaddrinfo ENOTFOUND db.xxx`
 
 `DATABASE_URL` غير صحيح في Vercel. انسخ **Connection string → URI** من Supabase (Transaction pooler, port **6543**) واستبدل كلمة المرور الحقيقية — لا تترك `[YOUR-PASSWORD]` في النص.
+
+### خطأ `Tenant or user not found` (بعد تسجيل الدخول)
+
+يظهر عندما يكون **اسم المستخدم في رابط الاتصال خاطئاً** لـ Supabase Pooler.
+
+| ❌ خطأ | ✅ صحيح |
+|--------|---------|
+| `postgresql://postgres:pass@...pooler...:6543/postgres` | `postgresql://postgres.**abcdefgh**:pass@...pooler...:6543/postgres` |
+
+**الحل:**
+1. Supabase → **Project Settings → Database**
+2. **Connection string** → تبويب **URI**
+3. اختر **Transaction pooler** (منفذ **6543**)
+4. انسخ الرابط كاملاً — يجب أن يبدأ المستخدم بـ `postgres.` متبوعاً بمعرف المشروع
+5. الصق في Vercel → `DATABASE_URL` → **Redeploy**
+6. نفّذ `npm run db:setup` مرة واحدة على نفس الرابط (من جهازك) لإنشاء الجداول والمستخدم admin
+
+**مثال لمشروعك (`aevwxwintewlcgxwvkrc`):**
+
+| الاستخدام | الرابط |
+|-----------|--------|
+| محلي (Direct) | `postgresql://postgres:PASSWORD@db.aevwxwintewlcgxwvkrc.supabase.co:5432/postgres` |
+| Vercel (Pooler) | `postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true` |
+
+لا تخلط بينهما: لا تستخدم `db.xxx.supabase.co` مع منفذ **6543**.
 
 ### خطأ `500 FUNCTION_INVOCATION_FAILED`
 

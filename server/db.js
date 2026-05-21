@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generateFullSchemaSQL } from './schemaGenerator.js';
+import { normalizeForRuntime, getConnectionDiagnostics } from './connectionConfig.js';
 
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
@@ -11,9 +12,18 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
 
 const { Pool } = pg;
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@localhost:5432/mpb_crm';
+let connectionString;
+let connectionError;
+
+try {
+  connectionString = normalizeForRuntime(
+    process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/mpb_crm'
+  );
+} catch (e) {
+  connectionError = e;
+  console.error('[db]', e.message);
+  connectionString = 'postgresql://postgres:postgres@localhost:5432/mpb_crm';
+}
 
 const isSupabase =
   connectionString.includes('supabase.com') ||
@@ -26,7 +36,35 @@ export const pool = new Pool({
   max: isSupabase ? 3 : 10,
 });
 
+export function getDbConfigError() {
+  return connectionError?.message || null;
+}
+
+export function isSupabasePoolerError(err) {
+  const msg = String(err?.message || err || '');
+  return (
+    msg.includes('Tenant or user not found') ||
+    msg.includes('password authentication failed') ||
+    msg.includes('ENOTFOUND base')
+  );
+}
+
+export function isInvalidDatabaseUrlError(err) {
+  const msg = String(err?.message || err || '');
+  return (
+    msg.includes('ENOTFOUND base') ||
+    msg.includes('incomplete') ||
+    msg.includes('invalid host') ||
+    msg.includes('DATABASE_URL')
+  );
+}
+
+export function getSafeDbDiagnostics() {
+  return getConnectionDiagnostics(connectionString);
+}
+
 export async function runSchema() {
+  if (connectionError) throw connectionError;
   const basePath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
   const baseSql = readFileSync(basePath, 'utf8');
   await pool.query(baseSql);
@@ -36,15 +74,14 @@ export async function runSchema() {
 }
 
 export async function testConnection() {
+  if (connectionError) throw connectionError;
   const r = await pool.query('SELECT 1 AS ok');
   return r.rows[0]?.ok === 1;
 }
 
-/** Local: run migrations on boot. Vercel/Supabase: run `npm run db:setup` once manually. */
 export async function initDatabase() {
-  const url = process.env.DATABASE_URL || '';
-  if (!url || url.includes('[') || url.includes('YOUR-PASSWORD')) {
-    console.error('[db] Invalid DATABASE_URL — set Supabase URI in Vercel Environment Variables');
+  if (connectionError) {
+    console.error('[db]', connectionError.message);
     return false;
   }
 
@@ -60,7 +97,11 @@ export async function initDatabase() {
     }
     return await testConnection();
   } catch (e) {
-    console.error('[db]', e.message);
+    if (isSupabasePoolerError(e) || isInvalidDatabaseUrlError(e)) {
+      console.error('[db]', e.message);
+    } else {
+      console.error('[db]', e.message);
+    }
     return false;
   }
 }

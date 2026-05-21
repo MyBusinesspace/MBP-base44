@@ -5,6 +5,27 @@ import { env } from '../config/env.js';
 import { signToken } from '../auth/token.js';
 import { resolveRequestUser } from '../middleware/authenticate.js';
 import { listEntities, createEntity, updateEntity } from '../entityStore.js';
+import { isSupabasePoolerError, isInvalidDatabaseUrlError } from '../db.js';
+
+function dbErrorResponse(res, e) {
+  if (isInvalidDatabaseUrlError(e) || e.message?.includes('ENOTFOUND base')) {
+    return res.status(503).json({
+      success: false,
+      error:
+        'رابط DATABASE_URL في Vercel غير مكتمل أو خاطئ (يظهر host=base). الصق الرابط الكامل من Supabase بدون اقتطاع، بدون علامات اقتباس، في سطر واحد.',
+      code: 'DATABASE_URL_INVALID',
+    });
+  }
+  if (isSupabasePoolerError(e)) {
+    return res.status(503).json({
+      success: false,
+      error:
+        'خطأ اتصال Supabase: رابط DATABASE_URL غير صحيح. من لوحة Supabase انسخ Connection string → URI (Transaction pooler) — اسم المستخدم يجب أن يكون postgres.[project-id] وليس postgres فقط.',
+      code: 'SUPABASE_CONNECTION',
+    });
+  }
+  return res.status(500).json({ success: false, error: e.message });
+}
 import { getDefaultBranchId } from '../auth/branch.js';
 import { hashPassword, verifyPassword, stripSensitiveUser } from '../auth/password.js';
 
@@ -118,7 +139,7 @@ router.post('/login', async (req, res) => {
     return res.json(issueAuthResponse(updated));
   } catch (e) {
     console.error('[auth/login]', e.message);
-    return res.status(500).json({ error: e.message, success: false });
+    return dbErrorResponse(res, e);
   }
 });
 
@@ -159,7 +180,7 @@ router.post('/register', async (req, res) => {
     return res.status(201).json(issueAuthResponse(user));
   } catch (e) {
     console.error('[auth/register]', e.message);
-    return res.status(500).json({ error: e.message, success: false });
+    return dbErrorResponse(res, e);
   }
 });
 
