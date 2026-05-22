@@ -1,5 +1,10 @@
 import parse from 'pg-connection-string';
-import { toSupabaseDirectUrl, extractProjectRef, isPoolerUrl } from './supabaseUrl.js';
+import {
+  toSupabaseDirectUrl,
+  toSupabasePoolerUrl,
+  extractProjectRef,
+  isPoolerUrl,
+} from './supabaseUrl.js';
 
 /**
  * Parse and validate DATABASE_URL. Incomplete URLs (no @host) parse as host "base" → ENOTFOUND base.
@@ -49,11 +54,9 @@ export function prepareDatabaseUrl(raw) {
 }
 
 export function normalizeForRuntime(raw) {
-  // Migrations / one-time setup must use Direct (5432), not pooler (6543).
-  if (
-    process.env.SKIP_SCHEMA_ON_BOOT === 'true' ||
-    process.env.SUPABASE_FORCE_DIRECT === 'true'
-  ) {
+  // Migration scripts only (setup-supabase.ps1 child processes).
+  // SKIP_SCHEMA_ON_BOOT only skips DDL in initDatabase() — must NOT force db.xxx on Vercel.
+  if (process.env.SUPABASE_FORCE_DIRECT === 'true') {
     return prepareDatabaseUrl(toSupabaseDirectUrl(raw));
   }
 
@@ -62,28 +65,35 @@ export function normalizeForRuntime(raw) {
 
   try {
     const url = new URL(prepared);
-    const isPooler = url.hostname.includes('pooler.supabase.com');
+    const isAwsPooler = url.hostname.includes('pooler.supabase.com');
     const isDirect = /^db\.[a-z0-9]+\.supabase\.co$/i.test(url.hostname);
-    // Only auto-switch on real Vercel deploys (both vars set), not stray local VERCEL=1.
     const onVercel =
       (process.env.VERCEL === '1' || process.env.VERCEL === 'true') &&
       Boolean(process.env.VERCEL_ENV);
     const preferPooler = onVercel || process.env.SUPABASE_USE_POOLER === 'true';
 
-    if (isDirect && ref && preferPooler) {
-      const region = /^[a-z]+-[a-z]+-\d+$/i.test(process.env.SUPABASE_REGION || '')
-        ? process.env.SUPABASE_REGION
-        : 'eu-central-1';
-      return `postgresql://postgres.${ref}:${encodeURIComponent(url.password ? decodeURIComponent(url.password) : '')}@aws-0-${region}.pooler.supabase.com:6543/postgres`;
-    }
-
-    if (isPooler && url.username === 'postgres' && ref) {
-      url.username = `postgres.${ref}`;
+    // Pooler URI from Dashboard — keep IPv4 host (never rewrite to db.xxx).
+    if (isAwsPooler && ref) {
+      if (url.username === 'postgres') {
+        url.username = `postgres.${ref}`;
+      }
+      url.port = url.port || '6543';
       return url.toString().replace(/\?.*$/, '');
     }
 
+    // Direct db.xxx on Vercel → build pooler (db.xxx is IPv6-only → ENOTFOUND).
+    if (isDirect && ref && preferPooler) {
+      return prepareDatabaseUrl(toSupabasePoolerUrl(raw));
+    }
+
     return prepared;
-  } catch {
+  } catch (e) {
+    if (
+      (process.env.VERCEL === '1' || process.env.VERCEL === 'true') &&
+      Boolean(process.env.VERCEL_ENV)
+    ) {
+      throw new Error(`Failed to configure Supabase Pooler URL on Vercel: ${e.message}`);
+    }
     return prepared;
   }
 }

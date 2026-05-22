@@ -20,7 +20,7 @@ function dbErrorResponse(res, e) {
     return res.status(503).json({
       success: false,
       error:
-        'خطأ اتصال Supabase: رابط DATABASE_URL غير صحيح. من لوحة Supabase انسخ Connection string → URI (Transaction pooler) — اسم المستخدم يجب أن يكون postgres.[project-id] وليس postgres فقط.',
+        'خطأ اتصال Supabase: رابط DATABASE_URL غير صحيح. في Vercel استخدم: postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:6543/postgres (من Supabase → Database → Transaction pooler).',
       code: 'SUPABASE_CONNECTION',
     });
   }
@@ -28,6 +28,7 @@ function dbErrorResponse(res, e) {
 }
 import { getDefaultBranchId } from '../auth/branch.js';
 import { hashPassword, verifyPassword, stripSensitiveUser } from '../auth/password.js';
+import { buildAuthRedirect } from '../utils/authRedirect.js';
 
 const router = Router();
 
@@ -203,12 +204,12 @@ router.get('/google', (_req, res) => {
 router.get('/google/callback', async (req, res) => {
   const client = getOAuthClient();
   if (!client) {
-    return res.redirect(`${env.webUrl}/?auth_error=google_not_configured`);
+    return res.redirect(buildAuthRedirect('auth_error=google_not_configured'));
   }
 
   const code = req.query.code;
   if (!code) {
-    return res.redirect(`${env.webUrl}/?auth_error=missing_code`);
+    return res.redirect(buildAuthRedirect('auth_error=missing_code'));
   }
 
   try {
@@ -224,10 +225,10 @@ router.get('/google/callback', async (req, res) => {
     const user = await upsertGoogleUser(profile);
     const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
 
-    res.redirect(`${env.webUrl}/?auth_token=${encodeURIComponent(token)}`);
+    res.redirect(buildAuthRedirect(`auth_token=${encodeURIComponent(token)}`));
   } catch (e) {
     console.error('[auth/google/callback]', e.message);
-    res.redirect(`${env.webUrl}/?auth_error=${encodeURIComponent(e.message)}`);
+    res.redirect(buildAuthRedirect(`auth_error=${encodeURIComponent(e.message)}`));
   }
 });
 

@@ -70,16 +70,15 @@ async function main() {
 
     console.log('\n✅ Supabase setup complete.');
     console.log('   Login: admin@local.dev / admin123');
-    console.log('\n   Vercel DATABASE_URL → use POOLER (6543):');
-    if (isPoolerUrl(inputUrl)) {
-      console.log('  ', inputUrl.replace(/:([^:@/]+)@/, ':***@'));
-    } else if (ref) {
+    console.log('\n   Vercel — copy pooler URI from Supabase Dashboard (IPv4), e.g.:');
+    if (ref) {
       console.log(
         '   postgresql://postgres.' +
           ref +
-          ':***@aws-0-eu-central-1.pooler.supabase.com:6543/postgres'
+          ':***@aws-1-ap-south-1.pooler.supabase.com:6543/postgres'
       );
-      console.log('   (Confirm region in Supabase Dashboard → Database)');
+      console.log('   Also set: SUPABASE_REGION=ap-south-1  SUPABASE_POOLER_PREFIX=aws-1');
+      console.log('   (Region/prefix must match your Dashboard — db.xxx fails on Vercel)');
     }
     console.log('');
   } catch (e) {

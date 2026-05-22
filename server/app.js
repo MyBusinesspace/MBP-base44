@@ -77,6 +77,9 @@ export function createApp() {
       database: dbErr ? 'invalid' : env.databaseUrl ? 'configured' : 'missing',
       database_error: dbErr,
       database_host: diag?.host || diag?.error,
+      database_port: diag?.port,
+      database_user: diag?.user,
+      database_pooler: diag?.is_pooler,
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });
@@ -95,10 +98,13 @@ export function createApp() {
       });
     }
     if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+      const ipv6Hint = msg.includes('db.') && msg.includes('supabase.co');
       return res.status(503).json({
         message: 'Database connection failed',
         detail: err.message,
-        hint: 'Set a valid Supabase DATABASE_URL in Vercel Environment Variables (pooler port 6543)',
+        hint: ipv6Hint
+          ? 'db.xxx.supabase.co is IPv6-only and fails on Vercel. Set SUPABASE_REGION (from Supabase Dashboard) + SUPABASE_POOLER_PREFIX=aws-1, or use the pooler URI (aws-*-REGION.pooler.supabase.com:6543).'
+          : 'Set a valid Supabase pooler DATABASE_URL in Vercel (port 6543, IPv4 host from Dashboard).',
       });
     }
     res.status(err.status || 500).json({ message: err.message || 'Internal error' });

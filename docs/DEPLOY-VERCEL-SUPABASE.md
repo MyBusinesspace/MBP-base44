@@ -18,21 +18,27 @@
 3. اختر **URI** مع **Transaction pooler** (منفذ **6543**)
 4. انسخ الرابط واستبدل `[YOUR-PASSWORD]`
 
-مثال:
+مثال (**انسخ Transaction pooler من Dashboard** — لا تستخدم `db.xxx` على Vercel، IPv6 فقط):
+
 ```env
-DATABASE_URL=postgresql://postgres.xxxxx:YOUR_PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.PROJECT_REF:YOUR_PASSWORD@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
+SUPABASE_REGION=ap-south-1
+SUPABASE_POOLER_PREFIX=aws-1
 SUPABASE_DB=true
+SKIP_SCHEMA_ON_BOOT=true
 ```
+
+> `db.PROJECT_REF.supabase.co` يعمل محلياً للـ migrations لكن **يفشل على Vercel** (`ENOTFOUND`) لأن المضيف IPv6 فقط.
 
 ### تهيئة الجداول (مرة واحدة من جهازك)
 
 على جهازك (PowerShell)، مع رابط Supabase:
 
 ```powershell
-# يقبل رابط Pooler أو Direct — السكربت يستخدم Direct تلقائياً للـ migrations
-.\scripts\setup-supabase.ps1 "postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+# يقبل رابط Pooler أو Direct — السكربت يستخدم Direct (5432) تلقائياً للـ migrations
+.\scripts\setup-supabase.ps1 "postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres"
 
-# أو مباشرة من Supabase (Connection string → Direct, port 5432):
+# أو:
 .\scripts\setup-supabase.ps1 "postgresql://postgres:PASSWORD@db.aevwxwintewlcgxwvkrc.supabase.co:5432/postgres"
 ```
 
@@ -72,11 +78,11 @@ vercel --prod
 |---------|--------|--------|
 | `DATABASE_URL` | رابط Supabase (pooler **6543**) | مطلوب |
 | `SUPABASE_DB` | `true` | مطلوب لـ SSL |
-| `SKIP_SCHEMA_ON_BOOT` | `true` | مطلوب على Vercel |
+| `SKIP_SCHEMA_ON_BOOT` | `true` | يمنع تشغيل migrations عند الإقلاع فقط — **لا يغيّر** رابط الاتصال (ابقَ على pooler 6543) |
 | `VITE_APP_ID` | `mpb-local` | للواجهة عند البناء |
 | `JWT_SECRET` | سلسلة عشوائية طويلة | مطلوب |
 | `AUTH_REQUIRED` | `true` | |
-| `WEB_URL` | `https://your-app.vercel.app` | بدون `/` في النهاية |
+| `WEB_URL` | `https://your-app.vercel.app` | بدون `/` في النهاية و**بدون** `=` في البداية (خطأ شائع: `=https://...`) |
 | `GOOGLE_OAUTH_CLIENT_ID` | من Google Console | للخادم — **بدون** VITE_ |
 | `VITE_GOOGLE_OAUTH_CLIENT_ID` | **نفس قيمة** Client ID أعلاه | للواجهة عند **البناء** (يظهر زر Google) |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | من Google Console | **بدون** VITE_ |
@@ -90,30 +96,28 @@ vercel --prod
 
 `DATABASE_URL` غير صحيح في Vercel. انسخ **Connection string → URI** من Supabase (Transaction pooler, port **6543**) واستبدل كلمة المرور الحقيقية — لا تترك `[YOUR-PASSWORD]` في النص.
 
-### خطأ `Tenant or user not found` (بعد تسجيل الدخول)
+### خطأ `getaddrinfo ENOTFOUND db.xxx.supabase.co` على Vercel
 
-يظهر عندما يكون **اسم المستخدم في رابط الاتصال خاطئاً** لـ Supabase Pooler.
+`db.PROJECT_REF.supabase.co` **IPv6 فقط** — Vercel لا يتصل به. استخدم **Pooler** من Dashboard (مضيف `aws-*-REGION.pooler.supabase.com`).
 
-| ❌ خطأ | ✅ صحيح |
-|--------|---------|
-| `postgresql://postgres:pass@...pooler...:6543/postgres` | `postgresql://postgres.**abcdefgh**:pass@...pooler...:6543/postgres` |
+> إذا كان `DATABASE_URL` صحيحاً (pooler) وما زال الخطأ يظهر: تأكد أن آخر كود مُرفوع — إصدار قديم كان يحوّل الاتصال إلى `db.xxx` عندما `SKIP_SCHEMA_ON_BOOT=true`.
 
-**الحل:**
-1. Supabase → **Project Settings → Database**
-2. **Connection string** → تبويب **URI**
-3. اختر **Transaction pooler** (منفذ **6543**)
-4. انسخ الرابط كاملاً — يجب أن يبدأ المستخدم بـ `postgres.` متبوعاً بمعرف المشروع
-5. الصق في Vercel → `DATABASE_URL` → **Redeploy**
-6. نفّذ `npm run db:setup` مرة واحدة على نفس الرابط (من جهازك) لإنشاء الجداول والمستخدم admin
+**في Vercel أضف:**
+```env
+DATABASE_URL=postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
+SUPABASE_REGION=ap-south-1
+SUPABASE_POOLER_PREFIX=aws-1
+```
+(المنطقة من Supabase → Database → Connection string — لمشروعك `ap-south-1` و `aws-1`، وليس `eu-central-1`.)
 
-**مثال لمشروعك (`aevwxwintewlcgxwvkrc`):**
+### خطأ `Tenant or user not found`
+
+منطقة أو بادئة pooler خاطئة. انسخ الرابط **كاملاً** من Dashboard — لا تخمّن `aws-0-eu-central-1`.
 
 | الاستخدام | الرابط |
 |-----------|--------|
-| محلي (Direct) | `postgresql://postgres:PASSWORD@db.aevwxwintewlcgxwvkrc.supabase.co:5432/postgres` |
-| Vercel (Pooler) | `postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?pgbouncer=true` |
-
-لا تخلط بينهما: لا تستخدم `db.xxx.supabase.co` مع منفذ **6543**.
+| محلي + migrations (Direct) | `postgresql://postgres:PASSWORD@db.aevwxwintewlcgxwvkrc.supabase.co:5432/postgres` |
+| Vercel (Transaction pooler) | `postgresql://postgres.aevwxwintewlcgxwvkrc:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:6543/postgres` |
 
 ### خطأ `500 FUNCTION_INVOCATION_FAILED`
 

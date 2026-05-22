@@ -14,6 +14,19 @@ const vercelHost =
 
 const databaseUrl = process.env.DATABASE_URL || '';
 
+export function normalizeWebUrl(raw) {
+  let u = String(raw || '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/^=+/, '');
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) {
+    u = `https://${u.replace(/^\/+/, '')}`;
+  }
+  u = u.replace(/^(https?):\/([^/])/i, '$1://$2');
+  return u.replace(/\/$/, '');
+}
+
 export const env = {
   databaseUrl,
   isVercel:
@@ -37,9 +50,10 @@ export const env = {
       ? `https://${vercelHost}/api/auth/google/callback`
       : `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`),
   jwtSecret: process.env.JWT_SECRET || 'mpb-local-dev-secret-change-me',
-  webUrl:
+  webUrl: normalizeWebUrl(
     process.env.WEB_URL ||
-    (vercelHost ? `https://${vercelHost}` : 'http://localhost:5173'),
+      (vercelHost ? `https://${vercelHost}` : 'http://localhost:5173')
+  ),
   authRequired: process.env.AUTH_REQUIRED !== 'false',
   localAdminPassword: process.env.LOCAL_ADMIN_PASSWORD || 'admin123',
 };
