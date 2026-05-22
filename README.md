@@ -21,6 +21,8 @@ npm start              # API (3001) + الواجهة (5173)
 
 دليل كامل: **[docs/DEPLOY-VERCEL-SUPABASE.md](docs/DEPLOY-VERCEL-SUPABASE.md)**
 
+**Vercel:** بعد أي تعديل على `server/` يجب `git push` ثم Redeploy — Vercel يبني من GitHub فقط. تحقق: `/api/config/status` يجب أن يظهر `env_database_host` = `aws-1-ap-south-1.pooler.supabase.com`.
+
 1. أنشئ مشروع Supabase وانسخ `DATABASE_URL` (pooler port 6543)  
 2. من جهازك: `npm run db:setup` مع `DATABASE_URL` لـ Supabase  
 3. اربط المستودع بـ Vercel واضبط متغيرات البيئة (انظر `.env.example`)  

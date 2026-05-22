@@ -76,7 +76,9 @@ vercel --prod
 
 | المتغير | القيمة | ملاحظة |
 |---------|--------|--------|
-| `DATABASE_URL` | رابط Supabase (pooler **6543**) | مطلوب |
+| `DATABASE_URL` | **pooler** `aws-1-ap-south-1.pooler.supabase.com:6543` — ليس `db.xxx` | مطلوب |
+| `SUPABASE_REGION` | `ap-south-1` | مطلوب إذا كان `DATABASE_URL` لا يزال `db.xxx` |
+| `SUPABASE_POOLER_PREFIX` | `aws-1` | مع المنطقة أعلاه |
 | `SUPABASE_DB` | `true` | مطلوب لـ SSL |
 | `SKIP_SCHEMA_ON_BOOT` | `true` | يمنع تشغيل migrations عند الإقلاع فقط — **لا يغيّر** رابط الاتصال (ابقَ على pooler 6543) |
 | `VITE_APP_ID` | `mpb-local` | للواجهة عند البناء |
@@ -128,6 +130,13 @@ SUPABASE_POOLER_PREFIX=aws-1
 ### التحقق من المتغيرات
 
 افتح: `https://your-app.vercel.app/api/config/status`
+
+يجب أن ترى:
+- `env_database_host`: `aws-1-ap-south-1.pooler.supabase.com` (وليس `db.xxx`)
+- `database_host`: نفس pooler
+- `database_warning`: `null`
+
+إذا `env_database_host` = `db.aevwxwintewlcgxwvkrc.supabase.co` → غيّر `DATABASE_URL` في Vercel ثم **Redeploy**.
 
 يجب أن ترى `"google_oauth": true` و `"database": "configured"`.
 

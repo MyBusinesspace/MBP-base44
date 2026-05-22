@@ -14,6 +14,14 @@ const vercelHost =
 
 const databaseUrl = process.env.DATABASE_URL || '';
 
+export function isVercelRuntime() {
+  return (
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL === 'true' ||
+    Boolean(process.env.VERCEL_ENV)
+  );
+}
+
 export function normalizeWebUrl(raw) {
   let u = String(raw || '')
     .trim()
@@ -29,10 +37,7 @@ export function normalizeWebUrl(raw) {
 
 export const env = {
   databaseUrl,
-  isVercel:
-    process.env.VERCEL === '1' ||
-    process.env.VERCEL === 'true' ||
-    Boolean(process.env.VERCEL_ENV),
+  isVercel: isVercelRuntime(),
   isSupabase:
     databaseUrl.includes('supabase.com') ||
     databaseUrl.includes('supabase.co') ||

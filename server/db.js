@@ -4,7 +4,13 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generateFullSchemaSQL } from './schemaGenerator.js';
-import { normalizeForRuntime, getConnectionDiagnostics } from './connectionConfig.js';
+import { prepareDatabaseUrl, getConnectionDiagnostics } from './connectionConfig.js';
+import { isVercelRuntime } from './config/env.js';
+import {
+  toSupabaseDirectUrl,
+  toSupabasePoolerUrl,
+  extractProjectRef,
+} from './supabaseUrl.js';
 
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
@@ -12,13 +18,58 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
 
 const { Pool } = pg;
 
+/**
+ * Resolve DB URL for runtime. Vercel cannot use db.xxx (IPv6-only).
+ * SKIP_SCHEMA_ON_BOOT must never force direct on serverless.
+ */
+function resolveConnectionString() {
+  const raw = (process.env.DATABASE_URL || '').trim();
+  const poolerEnv = (process.env.DATABASE_POOLER_URL || process.env.SUPABASE_DATABASE_URL || '').trim();
+  const defaultLocal = 'postgresql://postgres:postgres@localhost:5432/mpb_crm';
+
+  if (process.env.SUPABASE_FORCE_DIRECT === 'true') {
+    return prepareDatabaseUrl(toSupabaseDirectUrl(raw || defaultLocal));
+  }
+
+  if (isVercelRuntime()) {
+    if (poolerEnv.includes('pooler.supabase.com')) {
+      return prepareDatabaseUrl(poolerEnv);
+    }
+    if (raw.includes('pooler.supabase.com')) {
+      return prepareDatabaseUrl(raw);
+    }
+    if (raw) {
+      try {
+        return prepareDatabaseUrl(toSupabasePoolerUrl(raw));
+      } catch (e) {
+        const ref = extractProjectRef(raw);
+        if (ref === 'aevwxwintewlcgxwvkrc') {
+          const url = new URL(prepareDatabaseUrl(raw));
+          const pass = url.password ? decodeURIComponent(url.password) : '';
+          console.warn('[db] Using pooler fallback aws-1-ap-south-1 for Vercel');
+          return `postgresql://postgres.${ref}:${encodeURIComponent(pass)}@aws-1-ap-south-1.pooler.supabase.com:6543/postgres`;
+        }
+        throw e;
+      }
+    }
+    throw new Error('DATABASE_URL is not set on Vercel');
+  }
+
+  if (!raw) return defaultLocal;
+  if (raw.includes('pooler.supabase.com')) {
+    return prepareDatabaseUrl(raw);
+  }
+  return prepareDatabaseUrl(raw);
+}
+
 let connectionString;
 let connectionError;
 
 try {
-  connectionString = normalizeForRuntime(
-    process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/mpb_crm'
-  );
+  connectionString = resolveConnectionString();
+  if (isVercelRuntime()) {
+    console.log('[db] Vercel host:', getConnectionDiagnostics(connectionString).host);
+  }
 } catch (e) {
   connectionError = e;
   console.error('[db]', e.message);
@@ -53,6 +104,7 @@ export function isInvalidDatabaseUrlError(err) {
   const msg = String(err?.message || err || '');
   return (
     msg.includes('ENOTFOUND base') ||
+    (msg.includes('ENOTFOUND') && msg.includes('db.') && msg.includes('supabase.co')) ||
     msg.includes('incomplete') ||
     msg.includes('invalid host') ||
     msg.includes('DATABASE_URL')
@@ -86,10 +138,7 @@ export async function initDatabase() {
   }
 
   const skipBootSchema =
-    process.env.SKIP_SCHEMA_ON_BOOT === 'true' ||
-    process.env.VERCEL === '1' ||
-    process.env.VERCEL === 'true' ||
-    Boolean(process.env.VERCEL_ENV);
+    process.env.SKIP_SCHEMA_ON_BOOT === 'true' || isVercelRuntime();
 
   try {
     if (!skipBootSchema) {
@@ -97,11 +146,7 @@ export async function initDatabase() {
     }
     return await testConnection();
   } catch (e) {
-    if (isSupabasePoolerError(e) || isInvalidDatabaseUrlError(e)) {
-      console.error('[db]', e.message);
-    } else {
-      console.error('[db]', e.message);
-    }
+    console.error('[db]', e.message);
     return false;
   }
 }

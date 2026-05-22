@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { testConnection, getDbConfigError, getSafeDbDiagnostics } from './db.js';
+import { getEnvDatabaseHost } from './connectionConfig.js';
+import { isVercelRuntime } from './config/env.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
@@ -67,6 +69,10 @@ export function createApp() {
   app.get('/api/config/status', (_req, res) => {
     const dbErr = getDbConfigError();
     const diag = getSafeDbDiagnostics();
+    const envHost = getEnvDatabaseHost();
+    const resolvedHost = diag?.host;
+    const dbHostBadOnVercel =
+      isVercelRuntime() && resolvedHost && /^db\./i.test(resolvedHost);
     res.json({
       runtime: env.isVercel ? 'vercel' : 'local',
       google_maps: Boolean(env.googlePlacesApiKey),
@@ -76,10 +82,15 @@ export function createApp() {
       zapier: Boolean(env.zapierWebhookUrl),
       database: dbErr ? 'invalid' : env.databaseUrl ? 'configured' : 'missing',
       database_error: dbErr,
-      database_host: diag?.host || diag?.error,
+      env_database_host: envHost,
+      database_host: resolvedHost || diag?.error,
       database_port: diag?.port,
       database_user: diag?.user,
       database_pooler: diag?.is_pooler,
+      database_warning: dbHostBadOnVercel
+        ? 'Vercel is using db.xxx (IPv6). Set DATABASE_URL to aws-*-REGION.pooler.supabase.com:6543 in Vercel Environment Variables, then Redeploy.'
+        : null,
+      supabase_region_set: Boolean(process.env.SUPABASE_REGION),
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });

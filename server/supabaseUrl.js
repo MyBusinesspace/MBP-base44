@@ -22,7 +22,10 @@ export function resolvePoolerHost() {
   if (process.env.SUPABASE_POOLER_HOST) {
     return process.env.SUPABASE_POOLER_HOST.replace(/^https?:\/\//, '').split('/')[0];
   }
-  const region = process.env.SUPABASE_REGION;
+  let region = process.env.SUPABASE_REGION;
+  if (!region && (process.env.VERCEL === '1' || process.env.VERCEL_ENV)) {
+    region = 'ap-south-1';
+  }
   if (!region) return null;
   const prefix = process.env.SUPABASE_POOLER_PREFIX || 'aws-1';
   return `${prefix}-${region}.pooler.supabase.com`;

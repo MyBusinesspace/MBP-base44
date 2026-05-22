@@ -20,7 +20,7 @@ function dbErrorResponse(res, e) {
     return res.status(503).json({
       success: false,
       error:
-        'خطأ اتصال Supabase: رابط DATABASE_URL غير صحيح. في Vercel استخدم: postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:6543/postgres (من Supabase → Database → Transaction pooler).',
+        'خطأ اتصال Supabase على Vercel: استخدم pooler (IPv4) وليس db.xxx. مثال: postgresql://postgres.PROJECT_REF:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:6543/postgres — من Supabase → Database → Transaction pooler.',
       code: 'SUPABASE_CONNECTION',
     });
   }
