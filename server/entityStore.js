@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { pool } from './db.js';
 import { getEntityRegistry, getTableName, getEntityPropertyNames } from './entitySchema.js';
 import { env } from './config/env.js';
+import { normalizeUserForApi, normalizeUsersForApi } from './userNormalize.js';
 
 const DEV_USER = {
   id: 'local-admin-user',
@@ -29,38 +30,78 @@ function shouldInjectDevUser() {
   return !env.googleOAuthClientId && !env.isVercel && process.env.AUTH_REQUIRED !== 'true';
 }
 
-/** Find user by email in ent_user; sync from entity_records if needed. */
+/** Strict email lookup — never return a random user from listEntities. */
 export async function findUserByEmail(email) {
   const normalized = email?.toLowerCase()?.trim();
   if (!normalized) return null;
 
-  const fromTable = await listEntities('User', {
-    query: { email: normalized },
-    limit: 10,
-  });
-  if (fromTable.length) {
-    return fromTable.find((u) => u.email?.toLowerCase() === normalized) || fromTable[0];
-  }
-
+  const table = getTableName('User');
   const { rows } = await pool.query(
-    `SELECT id, data, created_by, created_by_id FROM entity_records
-     WHERE entity_name = 'User' AND LOWER(data->>'email') = $1 LIMIT 1`,
+    `SELECT * FROM ${table}
+     WHERE LOWER(TRIM(email)) = $1
+        OR LOWER(TRIM(extra->>'email')) = $1
+     LIMIT 1`,
     [normalized]
   );
-  if (!rows[0]) return null;
+  if (rows[0]) return normalizeUserForApi(recordFromRow(rows[0], 'User'));
 
-  const data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data || {};
-  return createEntity(
-    'User',
-    {
-      ...data,
-      id: rows[0].id,
-      email: normalized,
-      status: data.status || 'Active',
-      archived: data.archived ?? false,
-    },
-    { created_by: rows[0].created_by, created_by_id: rows[0].created_by_id }
+  const legacy = await pool.query(
+    `SELECT id, data, created_by, created_by_id FROM entity_records
+     WHERE entity_name = 'User' AND LOWER(TRIM(data->>'email')) = $1 LIMIT 1`,
+    [normalized]
   );
+  if (!legacy.rows[0]) return null;
+
+  const data =
+    typeof legacy.rows[0].data === 'string'
+      ? JSON.parse(legacy.rows[0].data)
+      : legacy.rows[0].data || {};
+  return normalizeUserForApi(
+    await createEntity(
+      'User',
+      {
+        ...data,
+        id: legacy.rows[0].id,
+        email: normalized,
+        status: data.status || 'Active',
+        archived: data.archived ?? false,
+      },
+      { created_by: legacy.rows[0].created_by, created_by_id: legacy.rows[0].created_by_id }
+    )
+  );
+}
+
+/** All users for Users page — ent_user + legacy entity_records (deduped). */
+export async function listAllUsers({ sort, limit = 5000, skip = 0, query } = {}) {
+  const { syncLegacyUsersToTables } = await import('./syncLegacyUsers.js');
+  await syncLegacyUsersToTables();
+
+  const table = getTableName('User');
+  const { rows } = await pool.query(`SELECT * FROM ${table} ORDER BY sort_order ASC NULLS LAST, created_date ASC`);
+  const byId = new Map();
+  for (const row of rows) {
+    const rec = normalizeUserForApi(recordFromRow(row, 'User'));
+    if (rec?.id) byId.set(rec.id, rec);
+  }
+
+  const legacy = await pool.query(
+    `SELECT id, data FROM entity_records WHERE entity_name = 'User'`
+  );
+  for (const row of legacy.rows) {
+    if (byId.has(row.id)) continue;
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+    if (!data.email) continue;
+    byId.set(row.id, normalizeUserForApi({ ...data, id: row.id }));
+  }
+
+  let records = Array.from(byId.values());
+  if (query && Object.keys(query).length > 0) {
+    records = records.filter((r) => matchQuery(r, query));
+  }
+  records = sortRecords(records, sort);
+  const lim = Math.min(Number(limit) || 5000, 5000);
+  const sk = Number(skip) || 0;
+  return records.slice(sk, sk + lim);
 }
 
 function safeColumn(name) {
@@ -211,6 +252,10 @@ function buildSqlFilter(entityName, query, params) {
 }
 
 export async function listEntities(entityName, { sort, limit = 50, skip = 0, query } = {}) {
+  if (entityName === 'User') {
+    return listAllUsers({ sort, limit, skip, query });
+  }
+
   const table = getTableName(entityName);
   if (!table) {
     return legacyListEntities(entityName, { sort, limit, skip, query });
@@ -244,7 +289,8 @@ export async function listEntities(entityName, { sort, limit = 50, skip = 0, que
       records = [getDevUser()];
     }
     records = sortRecords(records, sort);
-    return records.slice(sk, sk + lim);
+    const slice = records.slice(sk, sk + lim);
+    return entityName === 'User' ? normalizeUsersForApi(slice) : slice;
   }
 
   params.push(lim, sk);
@@ -255,7 +301,7 @@ export async function listEntities(entityName, { sort, limit = 50, skip = 0, que
   if (entityName === 'User' && records.length === 0 && sk === 0 && shouldInjectDevUser()) {
     records = [getDevUser()];
   }
-  return records;
+  return entityName === 'User' ? normalizeUsersForApi(records) : records;
 }
 
 function sortRecords(records, sort) {
@@ -282,7 +328,8 @@ export async function getEntity(entityName, id) {
     err.status = 404;
     throw err;
   }
-  return recordFromRow(rows[0], entityName);
+  const record = recordFromRow(rows[0], entityName);
+  return entityName === 'User' ? normalizeUserForApi(record) : record;
 }
 
 export async function createEntity(entityName, data, meta = {}) {

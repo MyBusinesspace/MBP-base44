@@ -1,6 +1,7 @@
 import { pool } from './db.js';
-import { createEntity, listEntities } from './entityStore.js';
+import { createEntity } from './entityStore.js';
 import { entityToTable } from './entitySchema.js';
+import { PROTECTED_USER_IDS } from './userNormalize.js';
 
 /** Copy User rows from entity_records → ent_user (Supabase Table Editor often only shows ent_user). */
 export async function syncLegacyUsersToTables() {
@@ -37,6 +38,29 @@ export async function syncLegacyUsersToTables() {
   }
   if (synced) console.log(`[db] Synced ${synced} User(s) from entity_records → ent_user`);
   return synced;
+}
+
+/** Keep seed admin extra.first_name/last_name aligned with full_name (legacy UI reads both). */
+export async function repairProtectedUserDisplayNames() {
+  const table = entityToTable('User');
+  for (const id of PROTECTED_USER_IDS) {
+    const { rows } = await pool.query(
+      `SELECT full_name, extra FROM ${table} WHERE id = $1`,
+      [id]
+    );
+    if (!rows[0]) continue;
+    const full = String(rows[0].full_name || '').trim();
+    if (!full) continue;
+    const parts = full.split(/\s+/).filter(Boolean);
+    const extra =
+      typeof rows[0].extra === 'string' ? JSON.parse(rows[0].extra) : { ...(rows[0].extra || {}) };
+    extra.first_name = parts[0] || full;
+    extra.last_name = parts.slice(1).join(' ') || '';
+    await pool.query(`UPDATE ${table} SET extra = $1::jsonb WHERE id = $2`, [
+      JSON.stringify(extra),
+      id,
+    ]);
+  }
 }
 
 export async function countUsersInDb() {

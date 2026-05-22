@@ -146,8 +146,11 @@ export async function initDatabase() {
     }
     const ok = await testConnection();
     if (ok) {
-      const { syncLegacyUsersToTables } = await import('./syncLegacyUsers.js');
+      const { syncLegacyUsersToTables, repairProtectedUserDisplayNames } = await import(
+        './syncLegacyUsers.js'
+      );
       await syncLegacyUsersToTables();
+      await repairProtectedUserDisplayNames();
     }
     return ok;
   } catch (e) {

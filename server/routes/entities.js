@@ -25,10 +25,13 @@ router.get('/:entityName', async (req, res, next) => {
     }
     const rows = await listEntities(entityName, {
       sort: sort || '-created_date',
-      limit: limit ? Number(limit) : 50,
+      limit: limit ? Number(limit) : 500,
       skip: skip ? Number(skip) : 0,
       query,
     });
+    if (entityName === 'User') {
+      res.setHeader('Cache-Control', 'no-store');
+    }
     res.json(rows);
   } catch (e) {
     next(e);

@@ -5,6 +5,7 @@ import { env } from '../config/env.js';
 import { signToken } from '../auth/token.js';
 import { resolveRequestUser } from '../middleware/authenticate.js';
 import { findUserByEmail, createEntity, updateEntity } from '../entityStore.js';
+import { PROTECTED_USER_IDS, normalizeUserForApi } from '../userNormalize.js';
 import { isSupabasePoolerError, isInvalidDatabaseUrlError } from '../db.js';
 
 function dbErrorResponse(res, e) {
@@ -53,35 +54,48 @@ function issueAuthResponse(user) {
 }
 
 async function upsertGoogleUser(profile) {
-  const email = profile.email?.toLowerCase();
+  const email = profile.email?.toLowerCase()?.trim();
   if (!email) throw new Error('Google account has no email');
 
   let user = await findUserByEmail(email);
   const branchId = await getDefaultBranchId();
   const now = new Date().toISOString();
+  const displayName = (profile.name || email.split('@')[0]).trim();
+  const nameParts = displayName.split(/\s+/).filter(Boolean);
+
+  if (user && PROTECTED_USER_IDS.has(user.id) && user.email?.toLowerCase() !== email) {
+    user = null;
+  }
 
   if (user) {
     user = await updateEntity('User', user.id, {
-      full_name: profile.name || user.full_name,
+      email,
+      full_name: displayName,
+      first_name: nameParts[0] || displayName,
+      last_name: nameParts.slice(1).join(' ') || '',
       avatar_url: profile.picture || user.avatar_url,
       last_login: now,
     });
-    return user;
+    return normalizeUserForApi(user);
   }
 
-  return createEntity('User', {
-    id: randomUUID(),
-    email,
-    full_name: profile.name || email.split('@')[0],
-    role: 'user',
-    branch_id: branchId,
-    company_id: branchId,
-    sort_order: 999,
-    archived: false,
-    avatar_url: profile.picture || null,
-    last_login: now,
-    status: 'Active',
-  });
+  return normalizeUserForApi(
+    await createEntity('User', {
+      id: randomUUID(),
+      email,
+      full_name: displayName,
+      first_name: nameParts[0] || displayName,
+      last_name: nameParts.slice(1).join(' ') || '',
+      role: 'user',
+      branch_id: branchId,
+      company_id: branchId,
+      sort_order: 999,
+      archived: false,
+      avatar_url: profile.picture || null,
+      last_login: now,
+      status: 'Active',
+    })
+  );
 }
 
 router.get('/status', (_req, res) => {
@@ -102,7 +116,7 @@ router.get('/me', async (req, res) => {
       }
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    res.json(stripSensitiveUser(user));
+    res.json(stripSensitiveUser(normalizeUserForApi(user)));
   } catch (e) {
     console.error('[auth/me]', e.message);
     return dbErrorResponse(res, e);

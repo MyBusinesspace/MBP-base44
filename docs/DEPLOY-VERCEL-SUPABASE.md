@@ -98,6 +98,14 @@ vercel --prod
 
 `DATABASE_URL` غير صحيح في Vercel. انسخ **Connection string → URI** من Supabase (Transaction pooler, port **6543**) واستبدل كلمة المرور الحقيقية — لا تترك `[YOUR-PASSWORD]` في النص.
 
+### يظهر اسم مستخدم آخر (مثل Cesar) بعد تسجيل الدخول
+
+ليس مستخدمًا ثانيًا في الجدول. الاسم كان داخل **`ent_user.extra`** (`first_name` / `last_name`) على نفس صف **`admin@local.dev`**، بينما العمود **`full_name`** = اسمك الحقيقي. الواجهة القديمة تعرض `first_name + last_name` أولًا.
+
+**الإصلاح (سيرفر فقط):** الكود يطبّع `/api/auth/me` وقائمة User، ويمنع Google OAuth من تعديل `local-admin-user` إلا إذا البريد مطابق. بعد `git push` + Redeploy: Logout → تسجيل دخول Google مرة أخرى → يُنشأ مستخدم جديد ببريدك في `ent_user`.
+
+في Supabase Table Editor افتح **`ent_user`** (ليس `entity_records` فقط).
+
 ### خطأ `getaddrinfo ENOTFOUND db.xxx.supabase.co` على Vercel
 
 `db.PROJECT_REF.supabase.co` **IPv6 فقط** — Vercel لا يتصل به. استخدم **Pooler** من Dashboard (مضيف `aws-*-REGION.pooler.supabase.com`).
