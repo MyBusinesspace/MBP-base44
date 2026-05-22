@@ -258,20 +258,8 @@ export function DataProvider({ children }) {
             return cached;
         }
 
-        const token = localStorage.getItem('mpb_access_token');
-        const skipIndexedDb = forceReload || !token || token === 'local-dev';
-
-        if (!skipIndexedDb && usersDB.isReady) {
-            const dbUsers = await usersDB.getAll();
-            if (dbUsers && dbUsers.length > 0) {
-                console.log(`✅ Users from IndexedDB (${dbUsers.length})`);
-                setCachedData(cacheKey, dbUsers);
-                loadUsers(true).catch(console.error);
-                return dbUsers;
-            }
-        }
-
-        console.log('📥 Loading users from backend...');
+        // Users must come from API/Supabase — IndexedDB kept stale Base44 rows (e.g. "Cesar").
+        console.log('📥 Loading users from backend (ent_user)...');
         try {
             // Using SDK directly - ALWAYS load all users to ensure no one is excluded
             let usersData;

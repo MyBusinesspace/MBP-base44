@@ -9,6 +9,8 @@ export function normalizeUserForApi(user) {
   if (!user) return user;
   const out = { ...user };
   delete out.password;
+  delete out.verification_code;
+  delete out.verification_code_expires_at;
 
   const full = String(out.full_name || '').trim();
   if (full) {

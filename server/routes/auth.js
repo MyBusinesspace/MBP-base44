@@ -236,9 +236,13 @@ router.get('/google/callback', async (req, res) => {
     const profile = ticket.getPayload();
     const user = await upsertGoogleUser(profile);
     const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
-    console.log('[auth/google] login', user.email, user.id, user.full_name);
+    console.log('[auth/google] saved user', user.email, user.id, user.full_name);
 
-    res.redirect(buildAuthRedirect(`auth_token=${encodeURIComponent(token)}`));
+    res.redirect(
+      buildAuthRedirect(
+        `auth_token=${encodeURIComponent(token)}&auth_email=${encodeURIComponent(user.email)}`
+      )
+    );
   } catch (e) {
     console.error('[auth/google/callback]', e.message);
     res.redirect(buildAuthRedirect(`auth_error=${encodeURIComponent(e.message)}`));
