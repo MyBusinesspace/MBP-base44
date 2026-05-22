@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { pool } from './db.js';
 import { getEntityRegistry, getTableName, getEntityPropertyNames } from './entitySchema.js';
+import { env } from './config/env.js';
 
 const DEV_USER = {
   id: 'local-admin-user',
@@ -22,6 +23,44 @@ export function getDevUser() {
     created_by: DEV_USER.email,
     created_by_id: DEV_USER.id,
   };
+}
+
+function shouldInjectDevUser() {
+  return !env.googleOAuthClientId && !env.isVercel && process.env.AUTH_REQUIRED !== 'true';
+}
+
+/** Find user by email in ent_user; sync from entity_records if needed. */
+export async function findUserByEmail(email) {
+  const normalized = email?.toLowerCase()?.trim();
+  if (!normalized) return null;
+
+  const fromTable = await listEntities('User', {
+    query: { email: normalized },
+    limit: 10,
+  });
+  if (fromTable.length) {
+    return fromTable.find((u) => u.email?.toLowerCase() === normalized) || fromTable[0];
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, data, created_by, created_by_id FROM entity_records
+     WHERE entity_name = 'User' AND LOWER(data->>'email') = $1 LIMIT 1`,
+    [normalized]
+  );
+  if (!rows[0]) return null;
+
+  const data = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data || {};
+  return createEntity(
+    'User',
+    {
+      ...data,
+      id: rows[0].id,
+      email: normalized,
+      status: data.status || 'Active',
+      archived: data.archived ?? false,
+    },
+    { created_by: rows[0].created_by, created_by_id: rows[0].created_by_id }
+  );
 }
 
 function safeColumn(name) {
@@ -201,7 +240,9 @@ export async function listEntities(entityName, { sort, limit = 50, skip = 0, que
     if (query && Object.keys(query).length > 0) {
       records = records.filter((r) => matchQuery(r, query));
     }
-    if (entityName === 'User' && records.length === 0) records = [getDevUser()];
+    if (entityName === 'User' && records.length === 0 && shouldInjectDevUser()) {
+      records = [getDevUser()];
+    }
     records = sortRecords(records, sort);
     return records.slice(sk, sk + lim);
   }
@@ -211,7 +252,7 @@ export async function listEntities(entityName, { sort, limit = 50, skip = 0, que
   const { rows } = await pool.query(sql, params);
   let records = rows.map((r) => recordFromRow(r, entityName));
 
-  if (entityName === 'User' && records.length === 0 && sk === 0) {
+  if (entityName === 'User' && records.length === 0 && sk === 0 && shouldInjectDevUser()) {
     records = [getDevUser()];
   }
   return records;
@@ -232,8 +273,6 @@ function sortRecords(records, sort) {
 }
 
 export async function getEntity(entityName, id) {
-  if (entityName === 'User' && id === 'me') return getDevUser();
-
   const table = getTableName(entityName);
   if (!table) return legacyGetEntity(entityName, id);
 
@@ -286,8 +325,6 @@ export async function createEntity(entityName, data, meta = {}) {
 }
 
 export async function updateEntity(entityName, id, data) {
-  if (entityName === 'User' && id === 'me') return getDevUser();
-
   const table = getTableName(entityName);
   if (!table) return legacyUpdateEntity(entityName, id, data);
 

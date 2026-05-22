@@ -226,6 +226,28 @@ export function DataProvider({ children }) {
         loadEssentialData();
     }, []);
 
+    useEffect(() => {
+        const clearCaches = async () => {
+            cache.data.clear();
+            cache.timestamps.clear();
+            if (usersDB.clear) await usersDB.clear();
+            if (projectsDB.clear) await projectsDB.clear();
+            if (customersDB.clear) await customersDB.clear();
+        };
+        const onClear = () => {
+            clearCaches().catch(console.error);
+        };
+        const onSession = () => {
+            loadEssentialData();
+        };
+        window.addEventListener('mpb:clear-data-cache', onClear);
+        window.addEventListener('mpb:session-changed', onSession);
+        return () => {
+            window.removeEventListener('mpb:clear-data-cache', onClear);
+            window.removeEventListener('mpb:session-changed', onSession);
+        };
+    }, [loadEssentialData, usersDB, projectsDB, customersDB]);
+
     // --- Load all users (User entity has built-in security) ---
     const loadUsers = useCallback(async (forceReload = false) => {
         const cacheKey = `users_${currentCompany?.id || 'all'}`;
@@ -236,7 +258,10 @@ export function DataProvider({ children }) {
             return cached;
         }
 
-        if (!forceReload && usersDB.isReady) {
+        const token = localStorage.getItem('mpb_access_token');
+        const skipIndexedDb = forceReload || !token || token === 'local-dev';
+
+        if (!skipIndexedDb && usersDB.isReady) {
             const dbUsers = await usersDB.getAll();
             if (dbUsers && dbUsers.length > 0) {
                 console.log(`✅ Users from IndexedDB (${dbUsers.length})`);

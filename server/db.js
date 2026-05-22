@@ -144,7 +144,12 @@ export async function initDatabase() {
     if (!skipBootSchema) {
       await runSchema();
     }
-    return await testConnection();
+    const ok = await testConnection();
+    if (ok) {
+      const { syncLegacyUsersToTables } = await import('./syncLegacyUsers.js');
+      await syncLegacyUsersToTables();
+    }
+    return ok;
   } catch (e) {
     console.error('[db]', e.message);
     return false;

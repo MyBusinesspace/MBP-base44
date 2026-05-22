@@ -127,7 +127,7 @@ export function createAppClient() {
     integrations: createIntegrationsModule(),
 
     auth: {
-      me: () => http.get(`/apps/${APP_ID}/entities/User/me`),
+      me: () => http.get('/api/auth/me'),
       updateMe: (data) => http.put(`/apps/${APP_ID}/entities/User/me`, data),
       logout(redirectUrl) {
         try {

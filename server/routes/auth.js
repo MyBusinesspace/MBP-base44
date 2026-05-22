@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { env } from '../config/env.js';
 import { signToken } from '../auth/token.js';
 import { resolveRequestUser } from '../middleware/authenticate.js';
-import { listEntities, createEntity, updateEntity } from '../entityStore.js';
+import { findUserByEmail, createEntity, updateEntity } from '../entityStore.js';
 import { isSupabasePoolerError, isInvalidDatabaseUrlError } from '../db.js';
 
 function dbErrorResponse(res, e) {
@@ -41,13 +41,6 @@ function getOAuthClient() {
     env.googleOAuthClientSecret,
     env.googleOAuthCallbackUrl
   );
-}
-
-async function findUserByEmail(email) {
-  const normalized = email?.toLowerCase()?.trim();
-  if (!normalized) return null;
-  const users = await listEntities('User', { query: { email: normalized }, limit: 1 });
-  return users[0] || null;
 }
 
 function issueAuthResponse(user) {
@@ -100,15 +93,20 @@ router.get('/status', (_req, res) => {
 });
 
 router.get('/me', async (req, res) => {
-  const user = await resolveRequestUser(req);
-  if (!user) {
-    if (!env.googleOAuthClientId) {
-      const { getDevUser } = await import('../entityStore.js');
-      return res.json(getDevUser());
+  try {
+    const user = await resolveRequestUser(req);
+    if (!user) {
+      if (!env.googleOAuthClientId) {
+        const { getDevUser } = await import('../entityStore.js');
+        return res.json(getDevUser());
+      }
+      return res.status(401).json({ message: 'Unauthorized' });
     }
-    return res.status(401).json({ message: 'Unauthorized' });
+    res.json(stripSensitiveUser(user));
+  } catch (e) {
+    console.error('[auth/me]', e.message);
+    return dbErrorResponse(res, e);
   }
-  res.json(stripSensitiveUser(user));
 });
 
 router.post('/login', async (req, res) => {
@@ -224,6 +222,7 @@ router.get('/google/callback', async (req, res) => {
     const profile = ticket.getPayload();
     const user = await upsertGoogleUser(profile);
     const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
+    console.log('[auth/google] login', user.email, user.id, user.full_name);
 
     res.redirect(buildAuthRedirect(`auth_token=${encodeURIComponent(token)}`));
   } catch (e) {

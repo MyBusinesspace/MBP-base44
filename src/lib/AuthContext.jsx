@@ -4,6 +4,7 @@ import { appParams } from '@/lib/app-params';
 import { http } from '@/api/http';
 import { LOCAL_DEV_USER } from '@/lib/localUser';
 import LocalLoginPage from '@/lib/LocalLoginPage';
+import { clearAppSessionCaches } from '@/lib/sessionCache';
 
 const AuthContext = createContext();
 
@@ -16,6 +17,7 @@ function readOAuthCallbackToken() {
   if (token) {
     try {
       localStorage.setItem('mpb_access_token', token);
+      clearAppSessionCaches();
     } catch {
       /* ignore */
     }
@@ -120,6 +122,7 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.removeItem(LOGOUT_FLAG);
     setLoggedOut(false);
     setLoginError(null);
+    clearAppSessionCaches();
     setUser(loggedInUser);
     setIsAuthenticated(true);
     setIsLoadingAuth(false);
@@ -179,6 +182,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     sessionStorage.setItem(LOGOUT_FLAG, '1');
     setLoggedOut(true);
+    clearAppSessionCaches();
     clearSession();
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     window.location.href = '/';

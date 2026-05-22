@@ -3,6 +3,7 @@ import cors from 'cors';
 import { testConnection, getDbConfigError, getSafeDbDiagnostics } from './db.js';
 import { getEnvDatabaseHost } from './connectionConfig.js';
 import { isVercelRuntime } from './config/env.js';
+import { countUsersInDb } from './syncLegacyUsers.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
@@ -66,13 +67,19 @@ export function createApp() {
     }
   });
 
-  app.get('/api/config/status', (_req, res) => {
+  app.get('/api/config/status', async (_req, res) => {
     const dbErr = getDbConfigError();
     const diag = getSafeDbDiagnostics();
     const envHost = getEnvDatabaseHost();
     const resolvedHost = diag?.host;
     const dbHostBadOnVercel =
       isVercelRuntime() && resolvedHost && /^db\./i.test(resolvedHost);
+    let userCounts = null;
+    try {
+      userCounts = await countUsersInDb();
+    } catch {
+      /* db not ready */
+    }
     res.json({
       runtime: env.isVercel ? 'vercel' : 'local',
       google_maps: Boolean(env.googlePlacesApiKey),
@@ -91,6 +98,8 @@ export function createApp() {
         ? 'Vercel is using db.xxx (IPv6). Set DATABASE_URL to aws-*-REGION.pooler.supabase.com:6543 in Vercel Environment Variables, then Redeploy.'
         : null,
       supabase_region_set: Boolean(process.env.SUPABASE_REGION),
+      users_ent_user: userCounts?.ent_user,
+      users_entity_records: userCounts?.entity_records,
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });
