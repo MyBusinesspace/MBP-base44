@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import { randomUUID } from 'crypto';
 import { env } from '../config/env.js';
 import { signToken } from '../auth/token.js';
 import { resolveRequestUser } from '../middleware/authenticate.js';
-import { findUserByEmail, createEntity, updateEntity } from '../entityStore.js';
-import { PROTECTED_USER_IDS, normalizeUserForApi } from '../userNormalize.js';
+import { findUserByEmail, updateEntity } from '../entityStore.js';
+import { normalizeUserForApi } from '../userNormalize.js';
+import { getUserByEmail, saveUser, saveGoogleUser } from '../userPersistence.js';
 import { isSupabasePoolerError, isInvalidDatabaseUrlError } from '../db.js';
 
 function dbErrorResponse(res, e) {
@@ -54,48 +54,8 @@ function issueAuthResponse(user) {
 }
 
 async function upsertGoogleUser(profile) {
-  const email = profile.email?.toLowerCase()?.trim();
-  if (!email) throw new Error('Google account has no email');
-
-  let user = await findUserByEmail(email);
   const branchId = await getDefaultBranchId();
-  const now = new Date().toISOString();
-  const displayName = (profile.name || email.split('@')[0]).trim();
-  const nameParts = displayName.split(/\s+/).filter(Boolean);
-
-  if (user && PROTECTED_USER_IDS.has(user.id) && user.email?.toLowerCase() !== email) {
-    user = null;
-  }
-
-  if (user) {
-    user = await updateEntity('User', user.id, {
-      email,
-      full_name: displayName,
-      first_name: nameParts[0] || displayName,
-      last_name: nameParts.slice(1).join(' ') || '',
-      avatar_url: profile.picture || user.avatar_url,
-      last_login: now,
-    });
-    return normalizeUserForApi(user);
-  }
-
-  return normalizeUserForApi(
-    await createEntity('User', {
-      id: randomUUID(),
-      email,
-      full_name: displayName,
-      first_name: nameParts[0] || displayName,
-      last_name: nameParts.slice(1).join(' ') || '',
-      role: 'user',
-      branch_id: branchId,
-      company_id: branchId,
-      sort_order: 999,
-      archived: false,
-      avatar_url: profile.picture || null,
-      last_login: now,
-      status: 'Active',
-    })
-  );
+  return saveGoogleUser(profile, branchId);
 }
 
 router.get('/status', (_req, res) => {
@@ -170,14 +130,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters', success: false });
     }
 
-    const existing = await findUserByEmail(email);
+    const existing = await getUserByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists', success: false });
     }
 
     const branchId = await getDefaultBranchId();
-    const user = await createEntity('User', {
-      id: randomUUID(),
+    const user = await saveUser({
       email,
       full_name: fullName || email.split('@')[0],
       role: 'user',

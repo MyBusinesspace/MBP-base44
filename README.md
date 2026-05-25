@@ -24,7 +24,9 @@ npm start              # API (3001) + الواجهة (5173)
 **Vercel:**  
 1. استورد **`.env.vercel`** في Vercel → Settings → Environment Variables → Import .env  
 2. `git push` ثم Redeploy  
-3. تحقق: `/api/config/status` → `database_host` = `aws-1-ap-south-1.pooler.supabase.com`
+3. تحقق: `/api/config/status` → `database_host` = `aws-1-ap-south-1.pooler.supabase.com` و **`auth_api_version`** = `2026-05-22-user-persist-v3` (إن لم يظهر = الكود القديم لم يُرفع)
+
+4. بعد **Google login** → Supabase `ent_user` يجب أن يظهر صف جديد ببريدك (`google-...` أو بريد Gmail)
 
 1. أنشئ مشروع Supabase وانسخ `DATABASE_URL` (pooler port 6543)  
 2. من جهازك: `npm run db:setup` مع `DATABASE_URL` لـ Supabase  

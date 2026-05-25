@@ -30,45 +30,10 @@ function shouldInjectDevUser() {
   return !env.googleOAuthClientId && !env.isVercel && process.env.AUTH_REQUIRED !== 'true';
 }
 
-/** Strict email lookup — never return a random user from listEntities. */
+/** Strict email lookup — exact match only (see userPersistence.js). */
 export async function findUserByEmail(email) {
-  const normalized = email?.toLowerCase()?.trim();
-  if (!normalized) return null;
-
-  const table = getTableName('User');
-  const { rows } = await pool.query(
-    `SELECT * FROM ${table}
-     WHERE LOWER(TRIM(email)) = $1
-        OR LOWER(TRIM(extra->>'email')) = $1
-     LIMIT 1`,
-    [normalized]
-  );
-  if (rows[0]) return normalizeUserForApi(recordFromRow(rows[0], 'User'));
-
-  const legacy = await pool.query(
-    `SELECT id, data, created_by, created_by_id FROM entity_records
-     WHERE entity_name = 'User' AND LOWER(TRIM(data->>'email')) = $1 LIMIT 1`,
-    [normalized]
-  );
-  if (!legacy.rows[0]) return null;
-
-  const data =
-    typeof legacy.rows[0].data === 'string'
-      ? JSON.parse(legacy.rows[0].data)
-      : legacy.rows[0].data || {};
-  return normalizeUserForApi(
-    await createEntity(
-      'User',
-      {
-        ...data,
-        id: legacy.rows[0].id,
-        email: normalized,
-        status: data.status || 'Active',
-        archived: data.archived ?? false,
-      },
-      { created_by: legacy.rows[0].created_by, created_by_id: legacy.rows[0].created_by_id }
-    )
-  );
+  const { getUserByEmail } = await import('./userPersistence.js');
+  return getUserByEmail(email);
 }
 
 /** All users for Users page — ent_user + legacy entity_records (deduped). */
