@@ -75,6 +75,8 @@ export const env = {
   smtpPass: normalizeEnvString(process.env.SMTP_PASS),
   /** Skip real email — return invitation link only (for Vercel/testing without domain). */
   emailDryRun: process.env.EMAIL_DRY_RUN === 'true',
+  /** Force provider when both Resend and SMTP are set: `smtp` | `resend` | `dry_run` */
+  emailProvider: normalizeEnvString(process.env.EMAIL_PROVIDER),
 };
 
 export function requireEnv(name, value) {
