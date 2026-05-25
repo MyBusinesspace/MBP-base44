@@ -4,7 +4,8 @@ import { testConnection, getDbConfigError, getSafeDbDiagnostics } from './db.js'
 import { getEnvDatabaseHost } from './connectionConfig.js';
 import { isVercelRuntime } from './config/env.js';
 import { countUsersInDb } from './syncLegacyUsers.js';
-import { isEmailConfigured } from './utils/sendEmail.js';
+import { isEmailConfigured, sendEmail, getEmailDiagnostics } from './utils/sendEmail.js';
+import { resolveRequestUser } from './middleware/authenticate.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
@@ -108,9 +109,43 @@ export function createApp() {
       users_entity_records: userCounts?.entity_records,
       auth_api_version: '2026-05-22-user-persist-v5',
       email_configured: isEmailConfigured(),
+      ...getEmailDiagnostics(),
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });
+  });
+
+  /** Admin-only: send test email (debug Resend/SMTP without changing UI pages). */
+  app.post('/api/email/test', async (req, res) => {
+    try {
+      const user = await resolveRequestUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(401).json({ success: false, error: 'Admin access required' });
+      }
+      if (!isEmailConfigured()) {
+        return res.status(503).json({ success: false, error: 'Email not configured' });
+      }
+      const to = req.body?.to?.trim() || user.email;
+      const result = await sendEmail({
+        to,
+        subject: 'MyBusinessPace — test email',
+        body: `Test email from MyBusinessPace (${env.webUrl}).\nIf you received this, Resend/SMTP is working.`,
+        fromName: 'MyBusinessPace',
+      });
+      return res.json({
+        success: true,
+        to,
+        ...result,
+        ...getEmailDiagnostics(),
+      });
+    } catch (e) {
+      console.error('[email/test]', e.message);
+      return res.status(503).json({
+        success: false,
+        error: e.message,
+        ...getEmailDiagnostics(),
+      });
+    }
   });
 
   app.use((err, _req, res, _next) => {

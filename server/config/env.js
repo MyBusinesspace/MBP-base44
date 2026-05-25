@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { normalizeEnvString } from '../utils/normalizeEnv.js';
 
 // Local: load .env — Vercel injects vars into process.env automatically (no .env file)
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
@@ -65,13 +66,13 @@ export const env = {
   ),
   authRequired: process.env.AUTH_REQUIRED !== 'false',
   localAdminPassword: process.env.LOCAL_ADMIN_PASSWORD || 'admin123',
-  resendApiKey: process.env.RESEND_API_KEY || '',
-  emailFrom: process.env.EMAIL_FROM || process.env.SMTP_FROM || '',
-  smtpHost: process.env.SMTP_HOST || '',
+  resendApiKey: normalizeEnvString(process.env.RESEND_API_KEY),
+  emailFrom: normalizeEnvString(process.env.EMAIL_FROM || process.env.SMTP_FROM),
+  smtpHost: normalizeEnvString(process.env.SMTP_HOST),
   smtpPort: Number(process.env.SMTP_PORT || 587),
   smtpSecure: process.env.SMTP_SECURE === 'true',
-  smtpUser: process.env.SMTP_USER || '',
-  smtpPass: process.env.SMTP_PASS || '',
+  smtpUser: normalizeEnvString(process.env.SMTP_USER),
+  smtpPass: normalizeEnvString(process.env.SMTP_PASS),
 };
 
 export function requireEnv(name, value) {

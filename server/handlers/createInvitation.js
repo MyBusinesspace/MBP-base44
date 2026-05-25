@@ -89,8 +89,9 @@ If you have questions, contact your administrator (${currentUser.email}).
 Best regards,
 MyBusinessPace Team`;
 
+  let sendResult;
   try {
-    await sendEmail({
+    sendResult = await sendEmail({
       to: email,
       subject: `MyBusinessPace — ${roleText} invitation`,
       body: emailBody,
@@ -113,7 +114,9 @@ MyBusinessPace Team`;
     invitation,
     invitationLink,
     emailSent: true,
-    message: `Invitation sent to ${email}. The user will appear after they sign in with Google.`,
+    resendId: sendResult?.resendId || null,
+    emailFrom: sendResult?.from || null,
+    message: `Invitation sent to ${email}. Check spam if not received. Resend dashboard: resend.com/emails`,
   };
 }
 
