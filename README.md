@@ -28,11 +28,10 @@ npm start              # API (3001) + الواجهة (5173)
 
 4. بعد **Google login** → Supabase `ent_user` يجب أن يظهر صف جديد ببريدك (`google-...` أو بريد Gmail)
 
-5. **دعوات المستخدمين (Resend):**
-   - `RESEND_API_KEY` + `EMAIL_FROM` في Vercel (مثال: `MyBusinessPace <invites@yourdomain.com>`)
-   - **يجب التحقق من النطاق** في [resend.com/domains](https://resend.com/domains) (DNS SPF/DKIM) — بدون ذلك لا يُسلّم البريد للآخرين
-   - تحقق: `/api/config/status` → `email_configured: true` و `email_from` + `email_hint`
-   - اختبار (مسجّل كأدمن): `POST /api/email/test` مع `{ "to": "your@email.com" }` و Bearer token
+5. **دعوات المستخدمين (اختبار بدون نطاق):**
+   - في Vercel: `EMAIL_DRY_RUN=true` → لا يُرسل بريد حقيقي؛ انسخ **رابط الدعوة** من نافذة Invite (زر Copy)
+   - للإنتاج لاحقاً: أزل `EMAIL_DRY_RUN` وأضف `RESEND_API_KEY` + `EMAIL_FROM` من نطاق موثّق في Resend
+   - بدائل أخرى: Gmail SMTP، أو `onboarding@resend.dev` لبريد حسابك فقط في Resend
 
 1. أنشئ مشروع Supabase وانسخ `DATABASE_URL` (pooler port 6543)  
 2. من جهازك: `npm run db:setup` مع `DATABASE_URL` لـ Supabase  

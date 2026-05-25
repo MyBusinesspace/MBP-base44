@@ -73,6 +73,8 @@ export const env = {
   smtpSecure: process.env.SMTP_SECURE === 'true',
   smtpUser: normalizeEnvString(process.env.SMTP_USER),
   smtpPass: normalizeEnvString(process.env.SMTP_PASS),
+  /** Skip real email — return invitation link only (for Vercel/testing without domain). */
+  emailDryRun: process.env.EMAIL_DRY_RUN === 'true',
 };
 
 export function requireEnv(name, value) {

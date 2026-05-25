@@ -25,7 +25,7 @@ export async function handleCreateInvitation(body, req) {
 
   if (!isEmailConfigured()) {
     const err = new Error(
-      'Email service not configured. Add RESEND_API_KEY (recommended) or SMTP settings in Vercel → Environment Variables, then Redeploy.'
+      'Email service not configured. Set EMAIL_DRY_RUN=true for testing without a domain, or add RESEND_API_KEY / SMTP in Vercel.'
     );
     err.status = 503;
     throw err;
@@ -89,6 +89,18 @@ If you have questions, contact your administrator (${currentUser.email}).
 Best regards,
 MyBusinessPace Team`;
 
+  if (env.emailDryRun) {
+    console.log('[createInvitation] DRY RUN — invitation link (no email sent):', invitationLink);
+    return {
+      success: true,
+      invitation,
+      invitationLink,
+      emailSent: false,
+      dryRun: true,
+      message: `Test mode: no email sent. Copy the invitation link and send it manually (WhatsApp, etc.).`,
+    };
+  }
+
   let sendResult;
   try {
     sendResult = await sendEmail({
@@ -116,7 +128,7 @@ MyBusinessPace Team`;
     emailSent: true,
     resendId: sendResult?.resendId || null,
     emailFrom: sendResult?.from || null,
-    message: `Invitation sent to ${email}. Check spam if not received. Resend dashboard: resend.com/emails`,
+    message: `Invitation sent to ${email}. Check spam if not received.`,
   };
 }
 

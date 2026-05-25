@@ -14,6 +14,15 @@ export function resolveResendFromAddress(fromName = 'MyBusinessPace') {
 }
 
 export function getEmailDiagnostics() {
+  if (env.emailDryRun) {
+    return {
+      email_provider: 'dry_run',
+      email_from: null,
+      email_hint:
+        'EMAIL_DRY_RUN=true — no real email sent. Copy invitationLink from the invite dialog or Vercel logs.',
+      email_dry_run: true,
+    };
+  }
   const provider = env.resendApiKey ? 'resend' : env.smtpHost ? 'smtp' : null;
   const from = env.resendApiKey ? resolveResendFromAddress() : normalizeEnvString(env.emailFrom) || env.smtpUser;
   let hint = null;
@@ -127,5 +136,5 @@ export async function sendEmail({ to, subject, body, fromName = 'MyBusinessPace'
 }
 
 export function isEmailConfigured() {
-  return Boolean(env.resendApiKey || env.smtpHost);
+  return Boolean(env.emailDryRun || env.resendApiKey || env.smtpHost);
 }
