@@ -3,6 +3,7 @@ import multer from 'multer';
 import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { getUploadsDir, ensureUploadsDir } from '../utils/uploadsPath.js';
+import { sendEmail, isEmailConfigured } from '../utils/sendEmail.js';
 
 let uploadMiddleware;
 
@@ -65,6 +66,29 @@ router.post('/Core/:endpointName', (req, res, next) => {
 
   if (endpointName === 'ExtractDataFromUploadedFile') {
     return res.json({ extracted_data: {}, fields: {} });
+  }
+
+  if (endpointName === 'SendEmail') {
+    const to = req.body?.to;
+    const subject = req.body?.subject || 'MyBusinessPace';
+    const body = req.body?.body || '';
+    const fromName = req.body?.from_name || 'MyBusinessPace';
+    if (!to) {
+      return res.status(400).json({ message: 'Missing "to" email address' });
+    }
+    if (!isEmailConfigured()) {
+      return res.status(503).json({
+        message:
+          'Email not configured. Set RESEND_API_KEY or SMTP_HOST in environment variables.',
+      });
+    }
+    try {
+      await sendEmail({ to, subject, body, fromName });
+      return res.json({ success: true });
+    } catch (e) {
+      console.error('[SendEmail]', e.message);
+      return res.status(503).json({ message: e.message });
+    }
   }
 
   res.json({ success: true, endpoint: endpointName });

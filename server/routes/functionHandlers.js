@@ -1,5 +1,9 @@
 import { env, requireEnv } from '../config/env.js';
 import { getNextCounter } from '../utils/counters.js';
+import {
+  handleCreateInvitation,
+  handleProcessInvitation,
+} from '../handlers/createInvitation.js';
 
 /** Matches Base44 response shape: pages often read `response.data.*` */
 export function withData(payload) {
@@ -152,7 +156,8 @@ export const functionHandlers = {
   backfillMissingWon: async () => ({ success: true, updated: 0 }),
   mergeCompanies: async () => ({ success: true, merged: 0 }),
   assignUsersToCompany: async () => ({ success: true }),
-  createInvitation: async (body) => ({ success: true, invitation: body }),
+  createInvitation: handleCreateInvitation,
+  processInvitation: handleProcessInvitation,
   repairEmployeeDocumentTypes: async () => ({ success: true, repaired: 0 }),
   assignAllUsersToRedcrane: async () => ({ success: true }),
   approveLeaveRequest: async () => ({ success: true }),

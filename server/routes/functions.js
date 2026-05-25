@@ -16,7 +16,7 @@ function functionNameFromReq(req) {
 
 async function runHandler(req, res, handler, { isMobile = false } = {}) {
   try {
-    const result = isMobile ? await handler(req) : await handler(req.body ?? {});
+    const result = isMobile ? await handler(req) : await handler(req.body ?? {}, req);
     if (result?.error && result.success === false) {
       return res.status(result.status || 500).json(withData(result));
     }

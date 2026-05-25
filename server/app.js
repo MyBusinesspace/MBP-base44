@@ -4,6 +4,7 @@ import { testConnection, getDbConfigError, getSafeDbDiagnostics } from './db.js'
 import { getEnvDatabaseHost } from './connectionConfig.js';
 import { isVercelRuntime } from './config/env.js';
 import { countUsersInDb } from './syncLegacyUsers.js';
+import { isEmailConfigured } from './utils/sendEmail.js';
 import entityRoutes from './routes/entities.js';
 import functionRoutes from './routes/functions.js';
 import integrationRoutes from './routes/integrations.js';
@@ -106,6 +107,7 @@ export function createApp() {
       users_ent_user: userCounts?.ent_user,
       users_entity_records: userCounts?.entity_records,
       auth_api_version: '2026-05-22-user-persist-v5',
+      email_configured: isEmailConfigured(),
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });

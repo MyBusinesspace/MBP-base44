@@ -28,6 +28,8 @@ npm start              # API (3001) + الواجهة (5173)
 
 4. بعد **Google login** → Supabase `ent_user` يجب أن يظهر صف جديد ببريدك (`google-...` أو بريد Gmail)
 
+5. **دعوات المستخدمين بالبريد:** أضف في Vercel `RESEND_API_KEY` + `EMAIL_FROM` (من [resend.com](https://resend.com) بعد التحقق من النطاق) — تحقق: `/api/config/status` → `email_configured: true`
+
 1. أنشئ مشروع Supabase وانسخ `DATABASE_URL` (pooler port 6543)  
 2. من جهازك: `npm run db:setup` مع `DATABASE_URL` لـ Supabase  
 3. اربط المستودع بـ Vercel واضبط متغيرات البيئة (انظر `.env.example`)  

@@ -2,9 +2,9 @@ import React, { createContext, useState, useContext, useEffect, useCallback } fr
 import { api } from '@/api/client';
 import { appParams } from '@/lib/app-params';
 import { http } from '@/api/http';
+import { clearAppSessionCaches } from '@/lib/sessionCache';
 import { LOCAL_DEV_USER } from '@/lib/localUser';
 import LocalLoginPage from '@/lib/LocalLoginPage';
-import { clearAppSessionCaches } from '@/lib/sessionCache';
 
 const AuthContext = createContext();
 
@@ -28,6 +28,17 @@ function readOAuthCallbackToken() {
   }
 
   return { token: null, authError };
+}
+
+function readInvitationTokenFromUrl() {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('invitation_token');
+  if (!token) return null;
+  params.delete('invitation_token');
+  const qs = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  return token;
 }
 
 const LOGOUT_FLAG = 'mpb_logged_out';
@@ -166,6 +177,24 @@ export const AuthProvider = ({ children }) => {
 
     const required = publicSettings?.public_settings?.auth_required ?? false;
     await checkUserAuth({ authRequired: required });
+
+    const invitationToken = readInvitationTokenFromUrl();
+    if (invitationToken) {
+      const accessToken = localStorage.getItem('mpb_access_token');
+      if (accessToken && accessToken !== 'local-dev') {
+        try {
+          await http.post(`/apps/${appParams.appId}/functions/processInvitation`, {
+            invitation_token: invitationToken,
+          });
+          clearAppSessionCaches();
+          await checkUserAuth({ authRequired: required });
+        } catch (error) {
+          console.warn('Invitation processing failed:', error.message);
+          setLoginError(error.message || 'Failed to apply invitation');
+        }
+      }
+    }
+
     setIsLoadingPublicSettings(false);
   }, [checkUserAuth, googleFromBuild]);
 
