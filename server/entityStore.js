@@ -298,6 +298,11 @@ export async function getEntity(entityName, id) {
 }
 
 export async function createEntity(entityName, data, meta = {}) {
+  if (entityName === 'User') {
+    const { saveUser } = await import('./userPersistence.js');
+    return saveUser(data, { id: data.id });
+  }
+
   const table = getTableName(entityName);
   const id = data.id || randomUUID();
   const dev = getDevUser();
