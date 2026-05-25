@@ -1,6 +1,12 @@
 import { env } from '../config/env.js';
-import { getEntity, updateEntity, listAllUsers } from '../entityStore.js';
-import { getUserByEmail, getUserById } from '../userPersistence.js';
+import { getEntity, listAllUsers } from '../entityStore.js';
+import {
+  getUserByEmail,
+  getUserByEmailForAuth,
+  getUserById,
+  setUserVerificationCode,
+  clearUserVerificationCode,
+} from '../userPersistence.js';
 import { stripSensitiveUser } from '../auth/password.js';
 import { sendEmail, isEmailConfigured, resolveEmailProvider } from '../utils/sendEmail.js';
 
@@ -60,16 +66,13 @@ export async function handleApiAuth(req) {
   if (action === 'send') {
     if (!email) return fail('Email is required', 400);
 
-    const user = await getUserByEmail(email);
+    const user = await getUserByEmailForAuth(email);
     if (!user) return fail('User not found', 404);
 
     const verificationCode = generateCode();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-    await updateEntity('User', user.id, {
-      verification_code: verificationCode,
-      verification_code_expires_at: expiresAt,
-    });
+    await setUserVerificationCode(user.id, verificationCode, expiresAt);
 
     if (env.emailDryRun) {
       console.log('[apiAuth] DRY RUN verification code for', email, verificationCode);
@@ -110,25 +113,25 @@ export async function handleApiAuth(req) {
   if (action === 'verify') {
     if (!email || !code) return fail('Email and code are required', 400);
 
-    const user = await getUserByEmail(email);
+    const user = await getUserByEmailForAuth(email);
     if (!user) return fail('User not found', 404);
 
-    if (!user.verification_code || !user.verification_code_expires_at) {
+    const storedCode = user.verification_code != null ? String(user.verification_code).trim() : '';
+    const expiresAt = user.verification_code_expires_at;
+
+    if (!storedCode || !expiresAt) {
       return fail('No verification code found or code expired', 400);
     }
 
-    if (new Date() > new Date(user.verification_code_expires_at)) {
+    if (new Date() > new Date(expiresAt)) {
       return fail('Verification code expired', 400);
     }
 
-    if (String(user.verification_code) !== String(code).trim()) {
+    if (storedCode !== String(code).trim()) {
       return fail('Invalid verification code', 400);
     }
 
-    await updateEntity('User', user.id, {
-      verification_code: null,
-      verification_code_expires_at: null,
-    });
+    await clearUserVerificationCode(user.id);
 
     return {
       success: true,

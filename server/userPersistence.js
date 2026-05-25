@@ -26,9 +26,9 @@ export async function getUserById(id) {
   return rowToUser(rows[0]);
 }
 
-function rowToUser(row) {
+function rowToUser(row, { forAuth = false } = {}) {
   const extra = typeof row.extra === 'string' ? JSON.parse(row.extra) : row.extra || {};
-  return normalizeUserForApi({
+  const user = {
     id: row.id,
     email: row.email,
     full_name: row.full_name,
@@ -42,7 +42,58 @@ function rowToUser(row) {
     created_by: row.created_by,
     created_by_id: row.created_by_id,
     ...extra,
-  });
+  };
+  if (forAuth) {
+    delete user.password;
+    return user;
+  }
+  return normalizeUserForApi(user);
+}
+
+/** Like getUserByEmail but keeps verification_code for mobile apiAuth. */
+export async function getUserByEmailForAuth(email) {
+  const normalized = email?.toLowerCase()?.trim();
+  if (!normalized) return null;
+  const table = entityToTable('User');
+  const { rows } = await pool.query(
+    `SELECT * FROM ${table} WHERE LOWER(TRIM(COALESCE(email, ''))) = $1 LIMIT 1`,
+    [normalized]
+  );
+  if (!rows[0]) return null;
+  return rowToUser(rows[0], { forAuth: true });
+}
+
+export async function setUserVerificationCode(userId, code, expiresAt) {
+  const table = entityToTable('User');
+  const { rows } = await pool.query(`SELECT extra FROM ${table} WHERE id = $1`, [userId]);
+  if (!rows[0]) throw new Error('User not found');
+  const prevExtra =
+    typeof rows[0].extra === 'string' ? JSON.parse(rows[0].extra) : rows[0].extra || {};
+  await pool.query(
+    `UPDATE ${table} SET extra = $1::jsonb, updated_date = NOW() WHERE id = $2`,
+    [
+      JSON.stringify({
+        ...prevExtra,
+        verification_code: String(code),
+        verification_code_expires_at: expiresAt,
+      }),
+      userId,
+    ]
+  );
+}
+
+export async function clearUserVerificationCode(userId) {
+  const table = entityToTable('User');
+  const { rows } = await pool.query(`SELECT extra FROM ${table} WHERE id = $1`, [userId]);
+  if (!rows[0]) return;
+  const prevExtra =
+    typeof rows[0].extra === 'string' ? JSON.parse(rows[0].extra) : rows[0].extra || {};
+  delete prevExtra.verification_code;
+  delete prevExtra.verification_code_expires_at;
+  await pool.query(
+    `UPDATE ${table} SET extra = $1::jsonb, updated_date = NOW() WHERE id = $2`,
+    [JSON.stringify(prevExtra), userId]
+  );
 }
 
 export async function saveUser(data, { id: preferredId } = {}) {
