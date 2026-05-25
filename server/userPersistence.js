@@ -114,10 +114,13 @@ export async function saveGoogleUser(profile, branchId) {
   const parts = displayName.split(/\s+/).filter(Boolean);
   const now = new Date().toISOString();
 
-  let existing = (await getUserById(googleId)) || (await getUserByEmail(email));
-
-  if (existing && PROTECTED_USER_IDS.has(existing.id) && existing.email?.toLowerCase() !== email) {
-    existing = null;
+  let existing = await getUserById(googleId);
+  if (!existing) {
+    const byEmail = await getUserByEmail(email);
+    // Never attach a Google login to seed admin (old API bug wrote OAuth data into local-admin-user).
+    if (byEmail && !PROTECTED_USER_IDS.has(byEmail.id)) {
+      existing = byEmail;
+    }
   }
 
   const id = existing?.id || googleId;

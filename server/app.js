@@ -65,7 +65,7 @@ export function createApp() {
         ok: true,
         appId: APP_ID,
         env: env.isVercel ? 'vercel' : 'local',
-        auth_api_version: '2026-05-22-user-persist-v4',
+        auth_api_version: '2026-05-22-user-persist-v5',
       });
     } catch (e) {
       res.status(503).json({ ok: false, error: e.message });
@@ -105,7 +105,7 @@ export function createApp() {
       supabase_region_set: Boolean(process.env.SUPABASE_REGION),
       users_ent_user: userCounts?.ent_user,
       users_entity_records: userCounts?.entity_records,
-      auth_api_version: '2026-05-22-user-persist-v4',
+      auth_api_version: '2026-05-22-user-persist-v5',
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
     });

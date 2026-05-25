@@ -187,12 +187,31 @@ router.get('/google/callback', async (req, res) => {
     const { tokens } = await client.getToken(String(code));
     client.setCredentials(tokens);
 
-    const ticket = await client.verifyIdToken({
-      idToken: tokens.id_token,
-      audience: env.googleOAuthClientId,
-    });
+    let profile;
+    if (tokens.id_token) {
+      const ticket = await client.verifyIdToken({
+        idToken: tokens.id_token,
+        audience: env.googleOAuthClientId,
+      });
+      profile = ticket.getPayload();
+    } else {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (!res.ok) throw new Error('Google userinfo failed');
+      const info = await res.json();
+      profile = {
+        sub: info.sub,
+        email: info.email,
+        name: info.name,
+        picture: info.picture,
+      };
+    }
 
-    const profile = ticket.getPayload();
+    if (!profile?.email) {
+      throw new Error('Google account has no email');
+    }
+
     const user = await upsertGoogleUser(profile);
     const token = signToken({ sub: user.id, email: user.email }, env.jwtSecret);
     console.log('[auth/google] saved user', user.email, user.id, user.full_name);

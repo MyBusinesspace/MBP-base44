@@ -49,11 +49,15 @@ export const env = {
   base44ServiceRoleKey: process.env.BASE44_SERVICE_ROLE_KEY || '',
   googleOAuthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
   googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
-  googleOAuthCallbackUrl:
-    process.env.GOOGLE_OAUTH_CALLBACK_URL ||
-    (vercelHost
-      ? `https://${vercelHost}/api/auth/google/callback`
-      : `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`),
+  googleOAuthCallbackUrl: (() => {
+    if (process.env.GOOGLE_OAUTH_CALLBACK_URL) {
+      return process.env.GOOGLE_OAUTH_CALLBACK_URL.trim();
+    }
+    const web = normalizeWebUrl(process.env.WEB_URL || '');
+    if (web) return `${web}/api/auth/google/callback`;
+    if (vercelHost) return `https://${vercelHost}/api/auth/google/callback`;
+    return `http://localhost:${process.env.API_PORT || 3001}/api/auth/google/callback`;
+  })(),
   jwtSecret: process.env.JWT_SECRET || 'mpb-local-dev-secret-change-me',
   webUrl: normalizeWebUrl(
     process.env.WEB_URL ||
