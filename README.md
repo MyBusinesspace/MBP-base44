@@ -32,6 +32,8 @@ npm start              # API (3001) + الواجهة (5173)
    - في Vercel: `EMAIL_DRY_RUN=true` → لا يُرسل بريد حقيقي؛ انسخ **رابط الدعوة** من نافذة Invite (زر Copy)
    - للإنتاج لاحقاً: أزل `EMAIL_DRY_RUN` وأضف `RESEND_API_KEY` + `EMAIL_FROM` من نطاق موثّق في Resend
    - **Gmail SMTP:** `EMAIL_PROVIDER=smtp` + `SMTP_*` (إن بقي `RESEND_API_KEY` يجب تعيين `EMAIL_PROVIDER=smtp` وإلا يُستخدم Resend)
+
+6. **تطبيق الموبايل (apiAuth):** `POST /apps/mpb-local/functions/apiAuth` مع `{ "action": "send", "email": "..." }` — لا تستخدم GET (كان يعيد stub). بعد النشر يجب ألا يظهر `_local_stub`.
    - بدائل: `EMAIL_DRY_RUN=true` أو `onboarding@resend.dev` في Resend
 
 1. أنشئ مشروع Supabase وانسخ `DATABASE_URL` (pooler port 6543)  

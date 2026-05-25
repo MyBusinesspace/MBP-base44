@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { functionHandlers, withData } from './functionHandlers.js';
 import { handleWorkOrders } from './mobileHandlers/workOrders.js';
+import { handleApiAuth } from '../handlers/apiAuth.js';
 
 const router = Router({ mergeParams: true });
 
 /** Mobile / REST-style functions (GET with ?action=, headers). */
 const mobileHandlers = {
   'work-orders': handleWorkOrders,
+  apiAuth: handleApiAuth,
 };
 
 function functionNameFromReq(req) {
@@ -19,6 +21,9 @@ async function runHandler(req, res, handler, { isMobile = false } = {}) {
     const result = isMobile ? await handler(req) : await handler(req.body ?? {}, req);
     if (result?.error && result.success === false) {
       return res.status(result.status || 500).json(withData(result));
+    }
+    if (result?.status && result.status >= 400) {
+      return res.status(result.status).json(withData(result));
     }
     return res.json(withData(result ?? { success: true }));
   } catch (e) {
