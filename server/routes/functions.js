@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { functionHandlers, withData } from './functionHandlers.js';
 import { handleWorkOrders } from './mobileHandlers/workOrders.js';
 import { handleApiAuth } from '../handlers/apiAuth.js';
+import { handleApiHelper } from '../handlers/apiHelper.js';
 
 const router = Router({ mergeParams: true });
 
@@ -9,6 +10,7 @@ const router = Router({ mergeParams: true });
 const mobileHandlers = {
   'work-orders': handleWorkOrders,
   apiAuth: handleApiAuth,
+  apiHelper: handleApiHelper,
 };
 
 function functionNameFromReq(req) {

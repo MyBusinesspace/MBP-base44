@@ -7,6 +7,7 @@ import {
   setUserVerificationCode,
   clearUserVerificationCode,
 } from '../userPersistence.js';
+import { normalizeMobileUserId } from '../utils/mobileUserId.js';
 import { stripSensitiveUser } from '../auth/password.js';
 import { sendEmail, isEmailConfigured, resolveEmailProvider } from '../utils/sendEmail.js';
 
@@ -24,7 +25,7 @@ export async function handleApiAuth(req) {
 
   /* GET ?action=getCurrentUser + header x-user-id */
   if (method === 'GET' && actionGet === 'getCurrentUser') {
-    const userId = req.headers['x-user-id'];
+    const userId = normalizeMobileUserId(req.headers['x-user-id']) || req.headers['x-user-id'];
     if (!userId) return fail('x-user-id header is required', 400);
 
     const user = (await getUserById(userId)) || (await getEntity('User', userId).catch(() => null));
