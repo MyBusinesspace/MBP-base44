@@ -116,8 +116,6 @@ export const functionHandlers = {
     message: 'Google Calendar sync not configured locally',
   }),
 
-  apiTimeTracker: async (body) => ({ success: true, data: body }),
-
   getNextWorkingReportNumber: async (body) => ({
     report_number: await getNextCounter('working_report', body?.branch_id),
   }),
