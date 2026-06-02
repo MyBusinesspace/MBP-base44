@@ -1,3 +1,4 @@
+import multer from 'multer';
 import { listEntities, getEntity, updateEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 
@@ -7,6 +8,20 @@ function normStr(v) {
 
 function eqCI(a, b) {
   return normStr(a).toLowerCase() === normStr(b).toLowerCase();
+}
+
+async function parseMultipartSingle(req, fieldName) {
+  const upload = multer({ storage: multer.memoryStorage() }).single(fieldName);
+  await new Promise((resolve, reject) => {
+    upload(req, /** @type {any} */ ({}), (err) => (err ? reject(err) : resolve()));
+  });
+  return req.file || null;
+}
+
+function fileToDataUrl(file) {
+  if (!file?.buffer) return null;
+  const mime = file.mimetype || 'application/octet-stream';
+  return `data:${mime};base64,${file.buffer.toString('base64')}`;
 }
 
 async function listTasks(req, user) {
@@ -470,6 +485,106 @@ async function updateWorkOrder(req, user) {
   };
 }
 
+async function uploadTimesheetPhoto(req, user) {
+  const timesheetId = req.query?.id_timesheet;
+  const photoType = req.query?.type; // clock_in | clock_out | switch
+  if (!timesheetId || !photoType) {
+    const err = new Error('Missing parameters');
+    err.status = 400;
+    err.data = {
+      example:
+        'POST /apps/mpb-local/functions/work-orders?action=upload-timesheet-photo&id_timesheet=<id>&type=clock_in',
+    };
+    throw err;
+  }
+
+  const file = await parseMultipartSingle(req, 'photo');
+  if (!file) {
+    const err = new Error('Photo file is required');
+    err.status = 400;
+    err.data = { example: 'Send multipart/form-data with field name \"photo\"' };
+    throw err;
+  }
+
+  const timesheet = await getEntity('TimesheetEntry', timesheetId);
+  if (timesheet.employee_id !== user.id) {
+    const err = new Error('Unauthorized: You can only upload photos for your own timesheet');
+    err.status = 403;
+    throw err;
+  }
+
+  const photoUrl = fileToDataUrl(file);
+  if (!photoUrl) {
+    const err = new Error('Photo upload failed');
+    err.status = 500;
+    throw err;
+  }
+
+  let updateData = {};
+  if (photoType === 'clock_in') updateData = { clock_in_photo_url: photoUrl };
+  else if (photoType === 'clock_out') updateData = { clock_out_photo_url: photoUrl };
+  else if (photoType === 'switch') {
+    updateData = { switch_photo_urls: [...(timesheet.switch_photo_urls || []), photoUrl] };
+  } else {
+    const err = new Error('Invalid photo type. Use: clock_in, clock_out, or switch');
+    err.status = 400;
+    throw err;
+  }
+
+  const updatedTimesheet = await updateEntity('TimesheetEntry', timesheetId, updateData);
+  return {
+    success: true,
+    message: `${photoType} photo uploaded successfully`,
+    data: { photo_url: photoUrl, timesheet: updatedTimesheet },
+  };
+}
+
+async function uploadSignature(req, user) {
+  const workOrderId = req.query?.id_work_order;
+  if (!workOrderId) {
+    const err = new Error('id_work_order parameter is required');
+    err.status = 400;
+    err.data = {
+      example: 'POST /apps/mpb-local/functions/work-orders?action=upload-signature&id_work_order=<work-order-id>',
+    };
+    throw err;
+  }
+
+  const file = await parseMultipartSingle(req, 'signature');
+  if (!file) {
+    const err = new Error('Signature file is required');
+    err.status = 400;
+    err.data = { example: 'Send multipart/form-data with field name \"signature\"' };
+    throw err;
+  }
+
+  const workOrder = await getEntity('TimeEntry', workOrderId);
+  const isAssigned = (workOrder.employee_ids || []).includes(user.id);
+  if (!isAdmin(user) && !isAssigned) {
+    const err = new Error('You do not have permission to upload signature for this work order');
+    err.status = 403;
+    err.data = { your_role: user.role };
+    throw err;
+  }
+
+  const signatureUrl = fileToDataUrl(file);
+  if (!signatureUrl) {
+    const err = new Error('Signature upload failed');
+    err.status = 500;
+    throw err;
+  }
+
+  const updatedWorkOrder = await updateEntity('TimeEntry', workOrderId, {
+    client_signature_url: signatureUrl,
+  });
+
+  return {
+    success: true,
+    message: 'Signature uploaded successfully',
+    data: { signature_url: signatureUrl, work_order: updatedWorkOrder },
+  };
+}
+
 /** Mobile work-orders function (GET ?action=...). */
 export async function handleWorkOrders(req) {
   const user = await resolveMobileUser(req);
@@ -508,6 +623,14 @@ export async function handleWorkOrders(req) {
 
   if (method === 'POST' && (eqCI(a, 'update') || eqCI(a, 'put') || eqCI(a, 'updateWorkOrder'))) {
     return updateWorkOrder(req, user);
+  }
+
+  if (method === 'POST' && eqCI(a, 'upload-timesheet-photo')) {
+    return uploadTimesheetPhoto(req, user);
+  }
+
+  if (method === 'POST' && eqCI(a, 'upload-signature')) {
+    return uploadSignature(req, user);
   }
 
   const err = new Error(

@@ -323,6 +323,33 @@ async function handleClockOut(userId, body) {
   };
 }
 
+async function handleAddTrackingPoint(userId, body) {
+  const { lat, lon } = body || {};
+  if (lat == null || lon == null) return fail('lat and lon are required', 400);
+
+  const activeTimesheets = await listEntities('TimesheetEntry', {
+    query: { employee_id: userId, is_active: true },
+    limit: 5,
+  });
+  if (!activeTimesheets.length) return fail('No active timesheet found', 404);
+
+  const timesheet = activeTimesheets[0];
+  const trackingPoints = Array.isArray(timesheet.live_tracking_points)
+    ? [...timesheet.live_tracking_points]
+    : [];
+  trackingPoints.push({
+    timestamp: new Date().toISOString(),
+    lat,
+    lon,
+  });
+
+  const updatedTimesheet = await updateEntity('TimesheetEntry', timesheet.id, {
+    live_tracking_points: trackingPoints,
+  });
+
+  return { success: true, data: updatedTimesheet, message: 'Tracking point added' };
+}
+
 export async function handleApiTimeTracker(req) {
   const method = req.method?.toUpperCase();
   const action = normAction(req.query?.action);
@@ -363,6 +390,15 @@ export async function handleApiTimeTracker(req) {
       return await handleClockOut(userId, req.body || {});
     } catch (e) {
       console.error('[apiTimeTracker] clockOut', e.message);
+      return fail(e.message, 500);
+    }
+  }
+
+  if (method === 'POST' && actionIs(action, 'addTrackingPoint')) {
+    try {
+      return await handleAddTrackingPoint(userId, req.body || {});
+    } catch (e) {
+      console.error('[apiTimeTracker] addTrackingPoint', e.message);
       return fail(e.message, 500);
     }
   }
