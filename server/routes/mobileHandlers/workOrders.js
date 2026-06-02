@@ -466,6 +466,23 @@ async function updateWorkOrder(req, user) {
     throw err;
   }
 
+  // Important: mobile may send partial task objects when editing reports.
+  // Merge tasks by id to avoid wiping planner fields (date/start_time/end_time/name...).
+  if (Array.isArray(updateData.tasks)) {
+    try {
+      const existing = await getEntity('TimeEntry', workOrderId);
+      const prevTasks = Array.isArray(existing?.tasks) ? existing.tasks : [];
+      const prevById = new Map(prevTasks.filter((t) => t?.id).map((t) => [t.id, t]));
+      updateData.tasks = updateData.tasks.map((t) => {
+        const id = t?.id;
+        if (!id || !prevById.has(id)) return t;
+        return { ...prevById.get(id), ...t };
+      });
+    } catch {
+      /* ignore merge if existing fetch fails */
+    }
+  }
+
   // Keep current work_order_number if it exists and looks valid
   try {
     const existing = await getEntity('TimeEntry', workOrderId);
