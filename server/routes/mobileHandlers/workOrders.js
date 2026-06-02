@@ -304,6 +304,125 @@ async function getWorkOrderById(req, _user) {
   return { success: true, data: wo };
 }
 
+async function getTaskReport(req) {
+  const taskId = req.query?.taskId || req.query?.task_id;
+  if (!taskId) {
+    const err = new Error('Task ID is required');
+    err.status = 400;
+    throw err;
+  }
+
+  // 1) Find work order containing the task
+  const allWorkOrders = await listEntities('TimeEntry', { limit: 5000, sort: '-planned_start_time' });
+  const wo = (allWorkOrders || []).find((w) => (w.tasks || []).some((t) => t.id === taskId));
+  if (!wo) {
+    const err = new Error('Task associated Work Order not found');
+    err.status = 404;
+    throw err;
+  }
+  const currentTask = (wo.tasks || []).find((t) => t.id === taskId);
+
+  // 2) Locate segment in timesheets
+  const allTimesheets = await listEntities('TimesheetEntry', { limit: 5000, sort: '-clock_in_time' });
+  let taskSegment = null;
+  for (const ts of allTimesheets || []) {
+    if (!Array.isArray(ts.work_order_segments)) continue;
+    const found = ts.work_order_segments.find((s) => s.task_id === taskId);
+    if (found) {
+      taskSegment = found;
+      break;
+    }
+  }
+
+  // 3) Times
+  let clockIn = 'N/A';
+  let clockOut = 'N/A';
+  let calculatedDuration = '0h 0m';
+  if (taskSegment) {
+    clockIn = taskSegment.start_time || 'N/A';
+    clockOut = taskSegment.end_time || 'In Progress';
+    if (taskSegment.start_time && taskSegment.end_time) {
+      const start = new Date(taskSegment.start_time);
+      const end = new Date(taskSegment.end_time);
+      const diffMs = end - start;
+      if (diffMs > 0) {
+        const totalMinutes = Math.floor(diffMs / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        calculatedDuration = `${hours}h ${minutes}m`;
+      }
+    } else if (taskSegment.duration_minutes) {
+      const h = Math.floor(taskSegment.duration_minutes / 60);
+      const m = taskSegment.duration_minutes % 60;
+      calculatedDuration = `${h}h ${m}m`;
+    }
+  }
+
+  // 4) Project, customer, users, teams
+  const [project, allUsers, allTeams] = await Promise.all([
+    wo.project_id ? getEntity('Project', wo.project_id).catch(() => null) : null,
+    listEntities('User', { limit: 5000 }).catch(() => []),
+    listEntities('Team', { limit: 5000 }).catch(() => []),
+  ]);
+
+  const userMap = Object.fromEntries((allUsers || []).map((u) => [u.id, u.full_name || u.email]));
+  const teamMap = Object.fromEntries((allTeams || []).map((t) => [t.id, t.name]));
+
+  const customer =
+    project?.customer_id ? await getEntity('Customer', project.customer_id).catch(() => null) : null;
+
+  const getWorkerNames = (ids) => {
+    if (!ids || !Array.isArray(ids)) return 'N/A';
+    return ids.map((id) => userMap[id]).filter(Boolean).join(', ') || 'N/A';
+  };
+
+  const reportData = {
+    header: {
+      work_order_no: wo.work_order_number || 'N/A',
+      working_report_no: wo.work_order_ref || '-',
+      title: wo.title || '',
+    },
+    general_information: {
+      company: customer?.name || 'N/A',
+      category: 'Service HST',
+      location: wo.start_address || '-',
+      project: project?.name || 'N/A',
+      date: currentTask?.date || (clockIn !== 'N/A' ? String(clockIn).split('T')[0] : 'N/A'),
+      time: `${currentTask?.start_time || '07:00'} - ${currentTask?.end_time || '17:00'}`,
+      management_instructions: [
+        {
+          task_name: currentTask?.name,
+          instruction: currentTask?.instructions,
+        },
+      ],
+    },
+    assigned_resources: {
+      teams:
+        currentTask?.team_ids?.map((id) => teamMap[id]).filter(Boolean).join(', ') || 'N/A',
+      workers: getWorkerNames(currentTask?.employee_ids),
+    },
+    site_report: {
+      work_done: currentTask?.work_done_items || [],
+      work_pending: currentTask?.work_pending_items || [],
+      spare_parts_installed: currentTask?.spare_parts_items || [],
+      spare_parts_pending: currentTask?.spare_parts_pending_items || [],
+      status: currentTask?.status,
+    },
+    time_tracker: {
+      clock_in: clockIn,
+      clock_out: clockOut,
+      duration: calculatedDuration,
+    },
+    client_approval: {
+      worker_names: getWorkerNames(currentTask?.employee_ids),
+      client_name: wo.client_representative_name || '-',
+      client_signature_url: wo.client_signature_url || '',
+    },
+  };
+
+  return { success: true, data: reportData };
+}
+
 /** Mobile work-orders function (GET ?action=...). */
 export async function handleWorkOrders(req) {
   const user = await resolveMobileUser(req);
@@ -334,6 +453,10 @@ export async function handleWorkOrders(req) {
       eqCI(a, 'getWorkorder'))
   ) {
     return getWorkOrderById(req, user);
+  }
+
+  if (method === 'GET' && eqCI(a, 'getTaskReport')) {
+    return getTaskReport(req);
   }
 
   const err = new Error(
