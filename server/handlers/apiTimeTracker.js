@@ -153,11 +153,30 @@ async function enrichActiveTimesheet(activeTimesheet, userId) {
 }
 
 async function handleGetActiveTimesheet(userId) {
-  const timesheets = await listEntities('TimesheetEntry', {
+  let timesheets = await listEntities('TimesheetEntry', {
     query: { employee_id: userId, is_active: true },
     limit: 5,
+    sort: '-clock_in_time',
   });
-  const activeTimesheet = timesheets[0] || null;
+  let activeTimesheet = timesheets[0] || null;
+
+  // Fallback: status=active but is_active not set
+  if (!activeTimesheet) {
+    const candidates = await listEntities('TimesheetEntry', {
+      query: { employee_id: userId, status: 'active' },
+      limit: 10,
+      sort: '-clock_in_time',
+    });
+    const open = (candidates || []).find((ts) => !ts.clock_out_time);
+    if (open) {
+      try {
+        await updateEntity('TimesheetEntry', open.id, { is_active: true });
+      } catch {
+        /* ignore */
+      }
+      activeTimesheet = open;
+    }
+  }
   if (!activeTimesheet) {
     return { success: true, data: null };
   }
@@ -257,10 +276,30 @@ async function handleClockOut(userId, body) {
     status,
   } = body || {};
 
-  const activeTimesheets = await listEntities('TimesheetEntry', {
+  let activeTimesheets = await listEntities('TimesheetEntry', {
     query: { employee_id: userId, is_active: true },
     limit: 5,
+    sort: '-clock_in_time',
   });
+
+  // Fallback: some clients saved status=active but is_active=false (or missed is_active)
+  if (!activeTimesheets.length) {
+    const candidates = await listEntities('TimesheetEntry', {
+      query: { employee_id: userId, status: 'active' },
+      limit: 10,
+      sort: '-clock_in_time',
+    });
+    const open = (candidates || []).find((ts) => !ts.clock_out_time);
+    if (open) {
+      try {
+        await updateEntity('TimesheetEntry', open.id, { is_active: true });
+      } catch {
+        /* ignore */
+      }
+      activeTimesheets = [open];
+    }
+  }
+
   if (!activeTimesheets.length) return fail('No active timesheet found', 404);
 
   const timesheet = activeTimesheets[0];
