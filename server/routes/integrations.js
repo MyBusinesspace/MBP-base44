@@ -52,7 +52,7 @@ router.post('/Core/:endpointName', (req, res, next) => {
 
   if (endpointName === 'CreateFileSignedUrl') {
     const uri = req.body?.file_uri || '/uploads/placeholder';
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = (process.env.WEB_URL || '').trim() || `${req.protocol}://${req.get('host')}`;
     return res.json({ signed_url: uri.startsWith('http') ? uri : `${base}${uri}` });
   }
 

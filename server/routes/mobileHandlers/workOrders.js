@@ -2,6 +2,7 @@ import multer from 'multer';
 import { listEntities, getEntity, updateEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 import { storeUpload } from '../../utils/storeUpload.js';
+import { env } from '../../config/env.js';
 
 function normStr(v) {
   return String(v ?? '').trim();
@@ -432,7 +433,10 @@ async function getTaskReport(req) {
     client_approval: {
       worker_names: getWorkerNames(currentTask?.employee_ids),
       client_name: wo.client_representative_name || '-',
-      client_signature_url: wo.client_signature_url || '',
+      client_signature_url:
+        wo.client_signature_url && String(wo.client_signature_url).startsWith('/')
+          ? `${env.webUrl}${wo.client_signature_url}`
+          : wo.client_signature_url || '',
     },
   };
 

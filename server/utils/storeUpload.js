@@ -82,7 +82,9 @@ export async function storeUpload({ buffer, mimetype, originalname, prefix = '' 
   // uploadsDir is an absolute path (e.g. /tmp/mpb-uploads on Vercel); keep it absolute.
   const destPath = pathJoin(uploadsDir, filename);
   await writeFile(destPath, buffer);
-  const fileUrl = `/uploads/${filename}`;
-  return { file_url: fileUrl, file_uri: fileUrl, storage: 'local', path: fileUrl };
+  const rel = `/uploads/${filename}`;
+  const base = env.webUrl || '';
+  const abs = base ? `${base}${rel}` : rel;
+  return { file_url: abs, file_uri: abs, storage: 'local', path: rel };
 }
 
