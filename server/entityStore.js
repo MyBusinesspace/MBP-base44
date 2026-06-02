@@ -120,9 +120,11 @@ function recordFromRow(row, entityName) {
       if (!out.date && dateFromPlan) out.date = dateFromPlan;
       if (!out.start_time && startFromPlan) out.start_time = startFromPlan;
       if (!out.end_time && endFromPlan) out.end_time = endFromPlan;
-      // Ensure arrays exist (mobile expects arrays)
-      if (!Array.isArray(out.employee_ids)) out.employee_ids = [];
-      if (!Array.isArray(out.team_ids)) out.team_ids = [];
+      // Ensure arrays exist (mobile expects arrays) and preserve assignment.
+      const woEmployees = Array.isArray(record.employee_ids) ? record.employee_ids : [];
+      const woTeams = Array.isArray(record.team_ids) ? record.team_ids : [];
+      if (!Array.isArray(out.employee_ids) || out.employee_ids.length === 0) out.employee_ids = woEmployees;
+      if (!Array.isArray(out.team_ids) || out.team_ids.length === 0) out.team_ids = woTeams;
       return out;
     });
   }

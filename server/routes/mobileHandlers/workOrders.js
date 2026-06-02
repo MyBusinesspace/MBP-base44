@@ -476,7 +476,19 @@ async function updateWorkOrder(req, user) {
       updateData.tasks = updateData.tasks.map((t) => {
         const id = t?.id;
         if (!id || !prevById.has(id)) return t;
-        return { ...prevById.get(id), ...t };
+        const prev = prevById.get(id);
+        const merged = { ...prev, ...t };
+
+        // Some mobile clients send employee_ids/team_ids as [] even when not editing assignments.
+        // Preserve previous non-empty assignment arrays in that case.
+        if (Array.isArray(t.employee_ids) && t.employee_ids.length === 0 && Array.isArray(prev.employee_ids) && prev.employee_ids.length > 0) {
+          merged.employee_ids = prev.employee_ids;
+        }
+        if (Array.isArray(t.team_ids) && t.team_ids.length === 0 && Array.isArray(prev.team_ids) && prev.team_ids.length > 0) {
+          merged.team_ids = prev.team_ids;
+        }
+
+        return merged;
       });
     } catch {
       /* ignore merge if existing fetch fails */
