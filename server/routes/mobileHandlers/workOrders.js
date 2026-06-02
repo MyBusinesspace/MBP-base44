@@ -1,4 +1,4 @@
-import { listEntities, getEntity } from '../../entityStore.js';
+import { listEntities, getEntity, updateEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 
 function normStr(v) {
@@ -423,6 +423,53 @@ async function getTaskReport(req) {
   return { success: true, data: reportData };
 }
 
+async function updateWorkOrder(req, user) {
+  if (!isAdmin(user)) {
+    const err = new Error('Only admins can update work orders');
+    err.status = 403;
+    err.data = { your_role: user.role };
+    throw err;
+  }
+
+  const workOrderId = req.query?.id || req.query?.work_order_id || req.body?.id;
+  if (!workOrderId) {
+    const err = new Error('Invalid work order ID');
+    err.status = 400;
+    throw err;
+  }
+
+  const body = req.body || {};
+  const systemFields = new Set(['id', 'created_date', 'updated_date', 'created_by_id', 'created_by']);
+  const updateData = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (systemFields.has(key)) continue;
+    if (value !== undefined) updateData[key] = value;
+  }
+  if (Object.keys(updateData).length === 0) {
+    const err = new Error('No valid fields to update');
+    err.status = 400;
+    throw err;
+  }
+
+  // Keep current work_order_number if it exists and looks valid
+  try {
+    const existing = await getEntity('TimeEntry', workOrderId);
+    const current = existing?.work_order_number;
+    const isValid = typeof current === 'string' && /^\d{4}\/\d{2}$/.test(current);
+    if (isValid) updateData.work_order_number = current;
+  } catch {
+    /* ignore */
+  }
+
+  const updated = await updateEntity('TimeEntry', workOrderId, updateData);
+  return {
+    success: true,
+    data: updated,
+    message: 'Work order updated successfully',
+    updated_by: { user_id: user.id, email: user.email },
+  };
+}
+
 /** Mobile work-orders function (GET ?action=...). */
 export async function handleWorkOrders(req) {
   const user = await resolveMobileUser(req);
@@ -457,6 +504,10 @@ export async function handleWorkOrders(req) {
 
   if (method === 'GET' && eqCI(a, 'getTaskReport')) {
     return getTaskReport(req);
+  }
+
+  if (method === 'POST' && (eqCI(a, 'update') || eqCI(a, 'put') || eqCI(a, 'updateWorkOrder'))) {
+    return updateWorkOrder(req, user);
   }
 
   const err = new Error(
