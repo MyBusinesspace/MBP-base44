@@ -77,6 +77,10 @@ export const env = {
   emailDryRun: process.env.EMAIL_DRY_RUN === 'true',
   /** Force provider when both Resend and SMTP are set: `smtp` | `resend` | `dry_run` */
   emailProvider: normalizeEnvString(process.env.EMAIL_PROVIDER),
+  /** Supabase Storage (for persistent uploads on Vercel) */
+  supabaseUrl: normalizeEnvString(process.env.SUPABASE_URL),
+  supabaseServiceRoleKey: normalizeEnvString(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  supabaseStorageBucket: normalizeEnvString(process.env.SUPABASE_STORAGE_BUCKET || 'uploads'),
 };
 
 export function requireEnv(name, value) {

@@ -1,9 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { extname } from 'path';
-import { randomUUID } from 'crypto';
 import { getUploadsDir, ensureUploadsDir } from '../utils/uploadsPath.js';
 import { sendEmail, isEmailConfigured } from '../utils/sendEmail.js';
+import { storeUpload } from '../utils/storeUpload.js';
 
 let uploadMiddleware;
 
@@ -12,18 +11,9 @@ function getUploadMiddleware() {
 
   const uploadsDir = ensureUploadsDir(getUploadsDir());
 
-  if (uploadsDir) {
-    const storage = multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, uploadsDir),
-      filename: (_req, file, cb) => {
-        const ext = extname(file.originalname) || '';
-        cb(null, `${randomUUID()}${ext}`);
-      },
-    });
-    uploadMiddleware = multer({ storage });
-  } else {
-    uploadMiddleware = multer({ storage: multer.memoryStorage() });
-  }
+  // Always use memory storage so we can forward to Supabase Storage on Vercel.
+  // Local disk filenames are not stable in serverless /tmp anyway.
+  uploadMiddleware = multer({ storage: multer.memoryStorage() });
 
   return uploadMiddleware;
 }
@@ -41,21 +31,23 @@ router.post('/Core/:endpointName', (req, res, next) => {
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    if (file.filename) {
-      const fileUrl = `/uploads/${file.filename}`;
-      return res.json({ file_url: fileUrl, file_uri: fileUrl });
-    }
-
-    if (file.buffer) {
-      const dataUrl = `data:${file.mimetype || 'application/octet-stream'};base64,${file.buffer.toString('base64')}`;
-      return res.json({
-        file_url: dataUrl,
-        file_uri: dataUrl,
-        _note: 'File stored in memory on serverless; use Supabase Storage for production persistence.',
+    try {
+      // diskStorage gives us file.path/filename; memoryStorage gives buffer
+      const buffer = file.buffer;
+      if (!buffer) {
+        return res.status(400).json({ message: 'No file data' });
+      }
+      const stored = await storeUpload({
+        buffer,
+        mimetype: file.mimetype,
+        originalname: file.originalname,
+        prefix: endpointName === 'UploadPrivateFile' ? 'private' : 'public',
       });
+      return res.json({ file_url: stored.file_url, file_uri: stored.file_uri });
+    } catch (e) {
+      console.error('[UploadFile]', e.message);
+      return res.status(503).json({ message: e.message });
     }
-
-    return res.status(400).json({ message: 'No file data' });
   }
 
   if (endpointName === 'CreateFileSignedUrl') {

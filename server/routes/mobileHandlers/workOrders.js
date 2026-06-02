@@ -1,6 +1,7 @@
 import multer from 'multer';
 import { listEntities, getEntity, updateEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
+import { storeUpload } from '../../utils/storeUpload.js';
 
 function normStr(v) {
   return String(v ?? '').trim();
@@ -16,12 +17,6 @@ async function parseMultipartSingle(req, fieldName) {
     upload(req, /** @type {any} */ ({}), (err) => (err ? reject(err) : resolve()));
   });
   return req.file || null;
-}
-
-function fileToDataUrl(file) {
-  if (!file?.buffer) return null;
-  const mime = file.mimetype || 'application/octet-stream';
-  return `data:${mime};base64,${file.buffer.toString('base64')}`;
 }
 
 async function listTasks(req, user) {
@@ -542,12 +537,13 @@ async function uploadTimesheetPhoto(req, user) {
     throw err;
   }
 
-  const photoUrl = fileToDataUrl(file);
-  if (!photoUrl) {
-    const err = new Error('Photo upload failed');
-    err.status = 500;
-    throw err;
-  }
+  const stored = await storeUpload({
+    buffer: file.buffer,
+    mimetype: file.mimetype,
+    originalname: file.originalname,
+    prefix: `timesheets/${timesheetId}`,
+  });
+  const photoUrl = stored.file_url;
 
   let updateData = {};
   if (photoType === 'clock_in') updateData = { clock_in_photo_url: photoUrl };
@@ -596,12 +592,13 @@ async function uploadSignature(req, user) {
     throw err;
   }
 
-  const signatureUrl = fileToDataUrl(file);
-  if (!signatureUrl) {
-    const err = new Error('Signature upload failed');
-    err.status = 500;
-    throw err;
-  }
+  const stored = await storeUpload({
+    buffer: file.buffer,
+    mimetype: file.mimetype,
+    originalname: file.originalname,
+    prefix: `signatures/${workOrderId}`,
+  });
+  const signatureUrl = stored.file_url;
 
   const updatedWorkOrder = await updateEntity('TimeEntry', workOrderId, {
     client_signature_url: signatureUrl,

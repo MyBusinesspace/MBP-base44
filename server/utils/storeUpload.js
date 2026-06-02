@@ -1,0 +1,86 @@
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
+import { env } from '../config/env.js';
+import { ensureUploadsDir, getUploadsDir } from './uploadsPath.js';
+import { writeFile } from 'fs/promises';
+
+function safeExt(originalname, mimetype) {
+  const ext = extname(originalname || '').toLowerCase();
+  if (ext) return ext;
+  if (mimetype === 'image/jpeg') return '.jpg';
+  if (mimetype === 'image/png') return '.png';
+  if (mimetype === 'image/webp') return '.webp';
+  return '';
+}
+
+function joinPath(parts) {
+  return parts
+    .filter(Boolean)
+    .map((p) => String(p).replace(/^\/+|\/+$/g, ''))
+    .join('/');
+}
+
+export function isSupabaseStorageConfigured() {
+  return Boolean(env.supabaseUrl && env.supabaseServiceRoleKey && env.supabaseStorageBucket);
+}
+
+/**
+ * Store an uploaded file either:
+ * - locally (disk /tmp on Vercel, ./server/uploads locally), or
+ * - Supabase Storage (recommended for Vercel persistence)
+ *
+ * Returns { file_url, file_uri } like Base44 integrations.Core.UploadFile.
+ */
+export async function storeUpload({ buffer, mimetype, originalname, prefix = '' }) {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error('No file data');
+  }
+
+  const ext = safeExt(originalname, mimetype);
+  const filename = `${randomUUID()}${ext}`;
+
+  // Prefer Supabase Storage when configured (persistent across serverless invocations).
+  if (isSupabaseStorageConfigured()) {
+    const objectPath = joinPath([prefix, filename]);
+    const url = `${env.supabaseUrl.replace(/\/$/, '')}/storage/v1/object/${encodeURIComponent(
+      env.supabaseStorageBucket
+    )}/${objectPath}`;
+
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+        apikey: env.supabaseServiceRoleKey,
+        'Content-Type': mimetype || 'application/octet-stream',
+        'x-upsert': 'true',
+      },
+      body: buffer,
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Supabase Storage upload failed: ${res.status} ${text}`);
+    }
+
+    const publicUrl = `${env.supabaseUrl.replace(
+      /\/$/,
+      ''
+    )}/storage/v1/object/public/${encodeURIComponent(env.supabaseStorageBucket)}/${objectPath}`;
+
+    return { file_url: publicUrl, file_uri: publicUrl, storage: 'supabase', path: objectPath };
+  }
+
+  // Fallback: write to local uploads folder (note: Vercel /tmp is ephemeral).
+  const uploadsDir = ensureUploadsDir(getUploadsDir());
+  if (!uploadsDir) {
+    throw new Error(
+      'Uploads not configured. Configure Supabase Storage (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + SUPABASE_STORAGE_BUCKET).'
+    );
+  }
+
+  const destPath = joinPath([uploadsDir, filename]).replace(/\//g, '\\');
+  await writeFile(destPath, buffer);
+  const fileUrl = `/uploads/${filename}`;
+  return { file_url: fileUrl, file_uri: fileUrl, storage: 'local', path: fileUrl };
+}
+
