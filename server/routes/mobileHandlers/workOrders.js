@@ -326,7 +326,13 @@ export async function handleWorkOrders(req) {
     return listWorkOrders(req, user);
   }
 
-  if (method === 'GET' && (eqCI(a, 'getWorkOrder') || eqCI(a, 'getWorkOrderById') || eqCI(a, 'getWorkorder'))) {
+  if (
+    method === 'GET' &&
+    (eqCI(a, 'get') ||
+      eqCI(a, 'getWorkOrder') ||
+      eqCI(a, 'getWorkOrderById') ||
+      eqCI(a, 'getWorkorder'))
+  ) {
     return getWorkOrderById(req, user);
   }
 
