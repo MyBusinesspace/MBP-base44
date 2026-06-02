@@ -103,6 +103,29 @@ function recordFromRow(row, entityName) {
   if (extra && typeof extra === 'object') {
     Object.assign(record, extra);
   }
+
+  // Mobile report edits sometimes save partial task objects (missing date/start/end/name),
+  // which makes Planner hide the work order. Repair the shape at read-time to preserve UI.
+  if (entityName === 'TimeEntry' && Array.isArray(record.tasks) && record.tasks.length > 0) {
+    const ps = typeof record.planned_start_time === 'string' ? record.planned_start_time : null;
+    const pe = typeof record.planned_end_time === 'string' ? record.planned_end_time : null;
+    const dateFromPlan = ps && ps.length >= 10 ? ps.slice(0, 10) : null;
+    const startFromPlan = ps && ps.length >= 16 ? ps.slice(11, 16) : null;
+    const endFromPlan = pe && pe.length >= 16 ? pe.slice(11, 16) : null;
+
+    record.tasks = record.tasks.map((t) => {
+      if (!t || typeof t !== 'object') return t;
+      const out = { ...t };
+      if (!out.name) out.name = record.title || 'Task';
+      if (!out.date && dateFromPlan) out.date = dateFromPlan;
+      if (!out.start_time && startFromPlan) out.start_time = startFromPlan;
+      if (!out.end_time && endFromPlan) out.end_time = endFromPlan;
+      // Ensure arrays exist (mobile expects arrays)
+      if (!Array.isArray(out.employee_ids)) out.employee_ids = [];
+      if (!Array.isArray(out.team_ids)) out.team_ids = [];
+      return out;
+    });
+  }
   return record;
 }
 
