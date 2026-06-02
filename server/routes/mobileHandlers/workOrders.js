@@ -1,6 +1,14 @@
 import { listEntities } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 
+function normStr(v) {
+  return String(v ?? '').trim();
+}
+
+function eqCI(a, b) {
+  return normStr(a).toLowerCase() === normStr(b).toLowerCase();
+}
+
 async function listTasks(req, user) {
   const q = req.query;
   const projectId = q.project_id;
@@ -81,7 +89,7 @@ async function listTasks(req, user) {
     if (projectId && projectId !== 'null' && task.project_id !== projectId) return false;
     if (categoryId && categoryId !== 'null' && task.work_order_category_id !== categoryId)
       return false;
-    if (status && task.status !== status) return false;
+    if (status && !eqCI(task.status, status)) return false;
     if (teamId && !(task.team_ids || []).includes(teamId)) return false;
     if (filterEmployeeId && !(task.employee_ids || []).includes(filterEmployeeId))
       return false;
@@ -208,14 +216,118 @@ async function listTasks(req, user) {
   };
 }
 
+async function listWorkOrders(req, user) {
+  const q = req.query;
+  const projectId = q.project_id;
+  const teamId = q.team_id;
+  const categoryId = q.category_id;
+  const status = q.status;
+  const filterDate = q.date;
+
+  let limit = parseInt(q.limit || '100', 10);
+  if (limit > 500) limit = 500;
+  const offset = parseInt(q.offset || '0', 10);
+
+  const queryFilters = { archived: false };
+  if (projectId && projectId !== 'null') queryFilters.project_id = projectId;
+  if (categoryId && categoryId !== 'null') queryFilters.work_order_category_id = categoryId;
+  if (status && status !== 'null') queryFilters.status = status;
+
+  let workOrders = await listEntities('TimeEntry', {
+    query: queryFilters,
+    sort: '-planned_start_time',
+    limit: 2000,
+  });
+
+  if (filterDate) {
+    workOrders = workOrders.filter((wo) => {
+      const ps = String(wo.planned_start_time || '');
+      return ps && ps >= `${filterDate}T00:00:00.000Z` && ps <= `${filterDate}T23:59:59.999Z`;
+    });
+  }
+
+  if (!isAdmin(user)) {
+    const allTeams = await listEntities('Team', { limit: 5000 });
+    const myTeamIds = (allTeams || [])
+      .filter((t) => (t.employee_ids || []).includes(user.id))
+      .map((t) => t.id);
+    workOrders = workOrders.filter((wo) => {
+      if (wo.employee_id === user.id) return true;
+      if ((wo.employee_ids || []).includes(user.id)) return true;
+      if ((wo.team_ids || []).some((id) => myTeamIds.includes(id))) return true;
+      if (wo.team_id && myTeamIds.includes(wo.team_id)) return true;
+      if (wo.tasks && Array.isArray(wo.tasks)) {
+        return wo.tasks.some(
+          (task) =>
+            (task.employee_ids || []).includes(user.id) ||
+            (task.team_ids || []).some((id) => myTeamIds.includes(id))
+        );
+      }
+      return false;
+    });
+  }
+
+  if (teamId && teamId !== 'null') {
+    workOrders = workOrders.filter((wo) => {
+      const ids = wo.team_ids || (wo.team_id ? [wo.team_id] : []);
+      return ids.includes(teamId);
+    });
+  }
+
+  const paginated = workOrders.slice(offset, offset + limit);
+  return {
+    success: true,
+    data: paginated,
+    pagination: {
+      total: workOrders.length,
+      limit,
+      offset,
+      hasMore: workOrders.length > offset + limit,
+    },
+    authenticated_as: { user_id: user.id, email: user.email, role: user.role },
+  };
+}
+
+async function getWorkOrderById(req, _user) {
+  const id = req.query?.id || req.query?.work_order_id;
+  if (!id) {
+    const err = new Error('Missing id query parameter');
+    err.status = 400;
+    throw err;
+  }
+  const wo = await listEntities('TimeEntry', { query: { id }, limit: 1 }).then((r) => r?.[0]);
+  if (!wo) {
+    const err = new Error('Work order not found');
+    err.status = 404;
+    throw err;
+  }
+  return { success: true, data: wo };
+}
+
 /** Mobile work-orders function (GET ?action=...). */
 export async function handleWorkOrders(req) {
   const user = await resolveMobileUser(req);
   const action = req.query.action;
   const method = req.method.toUpperCase();
 
-  if (method === 'GET' && action === 'listTasks') {
+  const a = normStr(action);
+  const isListTasks =
+    eqCI(a, 'listTasks') ||
+    eqCI(a, 'getTasks') ||
+    eqCI(a, 'tasks') ||
+    eqCI(a, 'list') ||
+    a.toLowerCase().startsWith('listtasks');
+
+  if (method === 'GET' && isListTasks) {
     return listTasks(req, user);
+  }
+
+  if (method === 'GET' && (eqCI(a, 'listWorkOrders') || eqCI(a, 'listWorkorders') || eqCI(a, 'listWorkOrdersV2'))) {
+    return listWorkOrders(req, user);
+  }
+
+  if (method === 'GET' && (eqCI(a, 'getWorkOrder') || eqCI(a, 'getWorkOrderById') || eqCI(a, 'getWorkorder'))) {
+    return getWorkOrderById(req, user);
   }
 
   const err = new Error(
