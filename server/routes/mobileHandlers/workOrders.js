@@ -1,4 +1,4 @@
-import { listEntities } from '../../entityStore.js';
+import { listEntities, getEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 
 function normStr(v) {
