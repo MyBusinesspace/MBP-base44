@@ -1,4 +1,4 @@
-import { extname } from 'path';
+import { extname, join as pathJoin } from 'path';
 import { randomUUID } from 'crypto';
 import { env } from '../config/env.js';
 import { ensureUploadsDir, getUploadsDir } from './uploadsPath.js';
@@ -13,7 +13,8 @@ function safeExt(originalname, mimetype) {
   return '';
 }
 
-function joinPath(parts) {
+function joinUrlPath(parts) {
+  // URL paths must use forward slashes; keep it relative (no leading slash)
   return parts
     .filter(Boolean)
     .map((p) => String(p).replace(/^\/+|\/+$/g, ''))
@@ -41,7 +42,7 @@ export async function storeUpload({ buffer, mimetype, originalname, prefix = '' 
 
   // Prefer Supabase Storage when configured (persistent across serverless invocations).
   if (isSupabaseStorageConfigured()) {
-    const objectPath = joinPath([prefix, filename]);
+    const objectPath = joinUrlPath([prefix, filename]);
     const url = `${env.supabaseUrl.replace(/\/$/, '')}/storage/v1/object/${encodeURIComponent(
       env.supabaseStorageBucket
     )}/${objectPath}`;
@@ -78,7 +79,8 @@ export async function storeUpload({ buffer, mimetype, originalname, prefix = '' 
     );
   }
 
-  const destPath = joinPath([uploadsDir, filename]).replace(/\//g, '\\');
+  // uploadsDir is an absolute path (e.g. /tmp/mpb-uploads on Vercel); keep it absolute.
+  const destPath = pathJoin(uploadsDir, filename);
   await writeFile(destPath, buffer);
   const fileUrl = `/uploads/${filename}`;
   return { file_url: fileUrl, file_uri: fileUrl, storage: 'local', path: fileUrl };
