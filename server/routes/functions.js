@@ -4,6 +4,7 @@ import { handleWorkOrders } from './mobileHandlers/workOrders.js';
 import { handleApiAuth } from '../handlers/apiAuth.js';
 import { handleApiHelper } from '../handlers/apiHelper.js';
 import { handleApiTimeTracker } from '../handlers/apiTimeTracker.js';
+import { handleApiWallPost } from '../handlers/apiWallPost.js';
 
 const router = Router({ mergeParams: true });
 
@@ -13,6 +14,7 @@ const mobileHandlers = {
   apiAuth: handleApiAuth,
   apiHelper: handleApiHelper,
   apiTimeTracker: handleApiTimeTracker,
+  apiWallPost: handleApiWallPost,
 };
 
 function functionNameFromReq(req) {
