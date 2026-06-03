@@ -29,6 +29,12 @@ async function runHandler(req, res, handler, { isMobile = false } = {}) {
     if (result?.status && result.status >= 400) {
       return res.status(result.status).json(withData(result));
     }
+    if (result?._rawHtml) {
+      return res
+        .status(result.status || 200)
+        .type(result.contentType || 'text/html; charset=utf-8')
+        .send(result.html);
+    }
     return res.json(withData(result ?? { success: true }));
   } catch (e) {
     console.error(`[functions] ${functionNameFromReq(req)}:`, e.message);

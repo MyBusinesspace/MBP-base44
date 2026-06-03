@@ -3,6 +3,10 @@ import { listEntities, getEntity, updateEntity } from '../../entityStore.js';
 import { resolveMobileUser, isAdmin } from '../mobileAuth.js';
 import { storeUpload } from '../../utils/storeUpload.js';
 import { env } from '../../config/env.js';
+import {
+  buildWorkOrderReportHtml,
+  loadWorkOrderReportContext,
+} from '../../utils/workOrderPdfHtml.js';
 
 function normStr(v) {
   return String(v ?? '').trim();
@@ -443,6 +447,29 @@ async function getTaskReport(req) {
   return { success: true, data: reportData };
 }
 
+/** Base44 generatePdf: returns HTML report (mobile prints/saves as PDF). */
+async function generatePdf(req) {
+  const id = req.query?.id || req.query?.work_order_id;
+  if (!id) {
+    const err = new Error('id required');
+    err.status = 400;
+    throw err;
+  }
+
+  let workOrder;
+  try {
+    workOrder = await getEntity('TimeEntry', id);
+  } catch {
+    const err = new Error('Work order not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const ctx = await loadWorkOrderReportContext(workOrder);
+  const html = buildWorkOrderReportHtml(workOrder, ctx);
+  return { _rawHtml: true, html, status: 200 };
+}
+
 async function updateWorkOrder(req, user) {
   if (!isAdmin(user)) {
     const err = new Error('Only admins can update work orders');
@@ -667,6 +694,10 @@ export async function handleWorkOrders(req) {
 
   if (method === 'GET' && eqCI(a, 'getTaskReport')) {
     return getTaskReport(req);
+  }
+
+  if (method === 'GET' && eqCI(a, 'generatePdf')) {
+    return generatePdf(req);
   }
 
   if (method === 'POST' && (eqCI(a, 'update') || eqCI(a, 'put') || eqCI(a, 'updateWorkOrder'))) {
