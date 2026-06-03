@@ -329,36 +329,8 @@ async function handleClockOut(userId, body) {
     work_order_segments: segments,
   });
 
-  const lastWoId = segments[segments.length - 1]?.work_order_id;
-  if (lastWoId) {
-    try {
-      await updateEntity('TimeEntry', lastWoId, {
-        is_active: false,
-        end_time: clockOutTime.toISOString(),
-        end_coords: normalizeCoords(clock_out_coords) || null,
-        end_address: clock_out_address || null,
-        duration_minutes: totalDurationMinutes,
-      });
-    } catch (err) {
-      console.warn('[apiTimeTracker] TimeEntry update on clock-out:', err.message);
-    }
-  }
-
-  if (work_order_id && status) {
-    try {
-      await updateEntity('TimeEntry', work_order_id, {
-        status,
-        completed_date: new Date().toISOString(),
-      });
-    } catch (err) {
-      console.warn('[apiTimeTracker] work order status update:', err.message);
-    }
-  }
-
   const workOrderId =
-    work_order_id ||
-    segments[segments.length - 1]?.work_order_id ||
-    body?.work_order_id;
+    work_order_id || segments[segments.length - 1]?.work_order_id || body?.work_order_id;
 
   let workOrderUpdated = false;
   let workOrder = null;
@@ -379,14 +351,14 @@ async function handleClockOut(userId, body) {
       workOrder = await updateEntity('TimeEntry', workOrderId, woUpdate);
       workOrderUpdated = true;
 
-      // Sync task status on the work order when mobile sends status (e.g. completed)
-      if (status && Array.isArray(workOrder.tasks)) {
-        workOrder.tasks = workOrder.tasks.map((t) => ({
+      if (status && Array.isArray(workOrder?.tasks)) {
+        const tasks = workOrder.tasks.map((t) => ({
           ...t,
           status: status === 'completed' ? 'completed' : t.status,
         }));
-        await updateEntity('TimeEntry', workOrderId, { tasks: workOrder.tasks });
+        await updateEntity('TimeEntry', workOrderId, { tasks });
       }
+      workOrder = await getEntity('TimeEntry', workOrderId);
     } catch (err) {
       console.warn('[apiTimeTracker] TimeEntry update on clock-out:', err.message);
     }
@@ -416,6 +388,7 @@ async function handleClockOut(userId, body) {
       work_order: workOrder,
     },
   };
+}
 
 async function handleAddTrackingPoint(userId, body) {
   const { lat, lon } = body || {};
