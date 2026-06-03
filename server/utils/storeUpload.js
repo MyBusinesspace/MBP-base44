@@ -40,41 +40,39 @@ export async function storeUpload({ buffer, mimetype, originalname, prefix = '' 
   const ext = safeExt(originalname, mimetype);
   const filename = `${randomUUID()}${ext}`;
 
-  if (env.isVercel && !isSupabaseStorageConfigured()) {
-    throw new Error(
-      'Persistent uploads on Vercel require SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET. Add them in Vercel Environment Variables and redeploy.'
-    );
-  }
-
-  // Prefer Supabase Storage when configured (persistent across serverless invocations).
+  // Prefer Supabase when configured; fall back to disk so mobile uploads keep working.
   if (isSupabaseStorageConfigured()) {
-    const objectPath = joinUrlPath([prefix, filename]);
-    const url = `${env.supabaseUrl.replace(/\/$/, '')}/storage/v1/object/${encodeURIComponent(
-      env.supabaseStorageBucket
-    )}/${objectPath}`;
+    try {
+      const objectPath = joinUrlPath([prefix, filename]);
+      const url = `${env.supabaseUrl.replace(/\/$/, '')}/storage/v1/object/${encodeURIComponent(
+        env.supabaseStorageBucket
+      )}/${objectPath}`;
 
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
-        apikey: env.supabaseServiceRoleKey,
-        'Content-Type': mimetype || 'application/octet-stream',
-        'x-upsert': 'true',
-      },
-      body: buffer,
-    });
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${env.supabaseServiceRoleKey}`,
+          apikey: env.supabaseServiceRoleKey,
+          'Content-Type': mimetype || 'application/octet-stream',
+          'x-upsert': 'true',
+        },
+        body: buffer,
+      });
 
-    const text = await res.text();
-    if (!res.ok) {
-      throw new Error(`Supabase Storage upload failed: ${res.status} ${text}`);
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(`Supabase Storage upload failed: ${res.status} ${text}`);
+      }
+
+      const publicUrl = `${env.supabaseUrl.replace(
+        /\/$/,
+        ''
+      )}/storage/v1/object/public/${encodeURIComponent(env.supabaseStorageBucket)}/${objectPath}`;
+
+      return { file_url: publicUrl, file_uri: publicUrl, storage: 'supabase', path: objectPath };
+    } catch (e) {
+      console.warn('[storeUpload] Supabase upload failed, using local fallback:', e.message);
     }
-
-    const publicUrl = `${env.supabaseUrl.replace(
-      /\/$/,
-      ''
-    )}/storage/v1/object/public/${encodeURIComponent(env.supabaseStorageBucket)}/${objectPath}`;
-
-    return { file_url: publicUrl, file_uri: publicUrl, storage: 'supabase', path: objectPath };
   }
 
   // Fallback: write to local uploads folder (note: Vercel /tmp is ephemeral).

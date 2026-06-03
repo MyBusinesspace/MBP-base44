@@ -24,7 +24,7 @@ export function createApp() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   // Dynamic handler: local disk + Supabase proxy (static alone fails on Vercel serverless /tmp).
   app.get(/^\/uploads\/(.+)$/, serveUpload);
 

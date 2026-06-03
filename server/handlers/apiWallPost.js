@@ -93,34 +93,75 @@ async function handleGet(req) {
   return { success: true, data: enrichPost(item, userMap) };
 }
 
+function decodeBase64Payload(raw) {
+  if (!raw) return null;
+  let s = String(raw).trim();
+  const dataUrlMatch = /^data:([^;]+);base64,(.+)$/i.exec(s);
+  if (dataUrlMatch) s = dataUrlMatch[2];
+  try {
+    const buffer = Buffer.from(s, 'base64');
+    return buffer.length > 0 ? buffer : null;
+  } catch {
+    return null;
+  }
+}
+
+function itemHasFilePayload(item) {
+  return Boolean(item?.file || item?.data || item?.base64);
+}
+
 async function processMediaItems(media_items) {
   const finalMediaItems = [];
+  const errors = [];
+
   for (const item of media_items || []) {
     if (item?.url) {
-      finalMediaItems.push(item);
+      finalMediaItems.push({ url: item.url, type: item.type || 'image' });
       continue;
     }
-    if (item?.file) {
-      try {
-        const buffer = Buffer.from(item.file, 'base64');
-        const mimetype = item.type === 'video' ? 'video/mp4' : 'image/jpeg';
-        const upload = await storeUpload({
-          buffer,
-          mimetype,
-          originalname: item.type === 'video' ? 'upload.mp4' : 'upload.jpg',
-          prefix: 'wall',
-        });
-        if (upload?.file_url) {
-          finalMediaItems.push({
-            url: upload.file_url,
-            type: item.type || 'image',
-          });
-        }
-      } catch (e) {
-        console.warn('[apiWallPost] media upload:', e.message);
+
+    const rawPayload = item?.file ?? item?.data ?? item?.base64;
+    if (!rawPayload) continue;
+
+    try {
+      const buffer = decodeBase64Payload(rawPayload);
+      if (!buffer) {
+        errors.push('invalid base64');
+        continue;
       }
+      const mimetype =
+        item.mimeType ||
+        item.mimetype ||
+        (item.type === 'video' ? 'video/mp4' : 'image/jpeg');
+      const upload = await storeUpload({
+        buffer,
+        mimetype,
+        originalname: item.type === 'video' ? 'upload.mp4' : 'upload.jpg',
+        prefix: 'wall',
+      });
+      if (upload?.file_url) {
+        finalMediaItems.push({
+          url: upload.file_url,
+          type: item.type || 'image',
+        });
+      } else {
+        errors.push('no file_url returned');
+      }
+    } catch (e) {
+      console.error('[apiWallPost] media upload:', e.message);
+      errors.push(e.message);
     }
   }
+
+  const expectedFiles = (media_items || []).filter(itemHasFilePayload).length;
+  if (expectedFiles > 0 && finalMediaItems.length === 0) {
+    const err = new Error(
+      errors[0] || 'Failed to upload media. Configure Supabase Storage or retry.'
+    );
+    err.status = 500;
+    throw err;
+  }
+
   return finalMediaItems;
 }
 
