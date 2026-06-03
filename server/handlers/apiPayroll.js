@@ -6,6 +6,12 @@ import {
 } from '../entityStore.js';
 import { getUserById } from '../userPersistence.js';
 import { normalizeMobileUserId } from '../utils/mobileUserId.js';
+import {
+  resolveEmployeeIdAliases,
+  employeeIdMatches,
+  computeLeaveTotalDays,
+  formatLeaveRequestForMobile,
+} from '../utils/employeeIdAliases.js';
 import { approveLeaveRequestLogic } from './approveLeaveRequest.js';
 
 function fail(message, status = 400) {
@@ -212,24 +218,54 @@ export async function handleApiPayroll(req) {
 
     // ==================== LEAVE REQUEST ====================
     if (action === 'list_leave_requests') {
-      const employeeId = req.query?.employee_id;
-      const query = {};
-      if (employeeId) {
-        const eid = normalizeMobileUserId(employeeId) || employeeId;
-        if (!isAdmin && eid !== userId) return fail('Forbidden', 403);
-        query.employee_id = eid;
+      const employeeIdParam = req.query?.employee_id;
+      let filterAliases = await resolveEmployeeIdAliases(currentUser);
+
+      if (employeeIdParam) {
+        const paramUser =
+          (await getUserById(normalizeMobileUserId(employeeIdParam) || employeeIdParam)) ||
+          (await getUserById(employeeIdParam));
+        const paramAliases = paramUser
+          ? await resolveEmployeeIdAliases(paramUser)
+          : await resolveEmployeeIdAliases(employeeIdParam);
+
+        if (!isAdmin && !paramAliases.some((id) => filterAliases.includes(id))) {
+          return fail('Forbidden', 403);
+        }
+        filterAliases = paramAliases;
       } else if (!isAdmin) {
-        query.employee_id = userId;
+        /* filterAliases already = current user */
       }
 
-      const requests = await listEntities('LeaveRequest', { query, limit: 5000 });
+      const allRequests = await listEntities('LeaveRequest', {
+        sort: '-created_date',
+        limit: 5000,
+      });
+
+      const requests = isAdmin && !employeeIdParam
+        ? allRequests
+        : allRequests.filter((r) => employeeIdMatches(r.employee_id, filterAliases));
+
+      const headerRaw = req.headers['x-user-id'] || req.headers['user_id'];
+      const headerId = normalizeMobileUserId(headerRaw) || headerRaw;
+      const preferredEmployeeId =
+        headerId &&
+        filterAliases.some(
+          (id) => id === headerId || (normalizeMobileUserId(id) || id) === headerId
+        )
+          ? headerId
+          : null;
+
       const employeeMap = await buildEmployeeMap(requests.map((r) => r.employee_id));
       const result = requests
         .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
-        .map((r) => ({
-          ...r,
-          employee_name: employeeMap[r.employee_id] || 'Unknown',
-        }));
+        .map((r) =>
+          formatLeaveRequestForMobile(
+            r,
+            employeeMap[r.employee_id] || 'Unknown',
+            preferredEmployeeId
+          )
+        );
       return { success: true, data: result };
     }
 
@@ -238,32 +274,54 @@ export async function handleApiPayroll(req) {
       if (!id) return fail('Missing id parameter', 400);
       const request = await getOne('LeaveRequest', id);
       if (!request) return fail('Leave request not found', 404);
-      if (!isAdmin && request.employee_id !== userId) return fail('Forbidden', 403);
+      const aliases = await resolveEmployeeIdAliases(currentUser);
+      if (!isAdmin && !employeeIdMatches(request.employee_id, aliases)) {
+        return fail('Forbidden', 403);
+      }
       const emp = await getUserById(
         normalizeMobileUserId(request.employee_id) || request.employee_id
       );
       return {
         success: true,
-        data: { ...request, employee_name: employeeDisplayName(emp) },
+        data: formatLeaveRequestForMobile(request, employeeDisplayName(emp)),
       };
     }
 
     if (action === 'create_leave_request' && method === 'POST') {
       const payload = stripSystemFields({ ...body });
+      const aliases = await resolveEmployeeIdAliases(currentUser);
+
+      const headerRaw = req.headers['x-user-id'] || req.headers['user_id'];
+      const headerId = normalizeMobileUserId(headerRaw) || headerRaw;
+
       if (payload.employee_id) {
         payload.employee_id = normalizeMobileUserId(payload.employee_id) || payload.employee_id;
+      } else if (headerId && aliases.some((id) => id === headerId || normalizeMobileUserId(id) === headerId)) {
+        payload.employee_id = headerId;
+      } else {
+        payload.employee_id = userId;
       }
-      if (!isAdmin && payload.employee_id && payload.employee_id !== userId) {
+
+      if (!isAdmin && !employeeIdMatches(payload.employee_id, aliases)) {
         return fail('Forbidden', 403);
       }
-      if (!payload.employee_id) payload.employee_id = userId;
       if (!payload.status) payload.status = 'pending';
 
+      if (payload.total_days == null) {
+        payload.total_days = computeLeaveTotalDays(payload.start_date, payload.end_date);
+      }
+      if (payload.paid_days == null && payload.unpaid_days == null) {
+        payload.paid_days = payload.total_days;
+        payload.unpaid_days = 0;
+      }
+
       const newRequest = await createEntity('LeaveRequest', payload);
-      const emp = await getUserById(userId);
+      const emp = await getUserById(
+        normalizeMobileUserId(newRequest.employee_id) || newRequest.employee_id
+      );
       return {
         success: true,
-        data: { ...newRequest, employee_name: employeeDisplayName(emp) },
+        data: formatLeaveRequestForMobile(newRequest, employeeDisplayName(emp)),
         status: 201,
       };
     }
@@ -274,15 +332,22 @@ export async function handleApiPayroll(req) {
       const request = await getOne('LeaveRequest', id);
       if (!request) return fail('Leave request not found', 404);
 
+      const aliases = await resolveEmployeeIdAliases(currentUser);
       if (!isAdmin) {
-        if (request.employee_id !== userId) return fail('Forbidden', 403);
+        if (!employeeIdMatches(request.employee_id, aliases)) return fail('Forbidden', 403);
         if (request.status !== 'pending') {
           return fail('Cannot update non-pending requests', 403);
         }
       }
 
       const updated = await updateEntity('LeaveRequest', id, stripSystemFields(body));
-      return { success: true, data: updated };
+      const emp = await getUserById(
+        normalizeMobileUserId(updated.employee_id) || updated.employee_id
+      );
+      return {
+        success: true,
+        data: formatLeaveRequestForMobile(updated, employeeDisplayName(emp)),
+      };
     }
 
     if (action === 'delete_leave_request' && (method === 'POST' || method === 'DELETE' || method === 'GET')) {
@@ -291,8 +356,9 @@ export async function handleApiPayroll(req) {
       const request = await getOne('LeaveRequest', id);
       if (!request) return fail('Leave request not found', 404);
 
+      const aliases = await resolveEmployeeIdAliases(currentUser);
       if (!isAdmin) {
-        if (request.employee_id !== userId) return fail('Forbidden', 403);
+        if (!employeeIdMatches(request.employee_id, aliases)) return fail('Forbidden', 403);
         if (request.status !== 'pending') {
           return fail('Cannot delete non-pending requests', 403);
         }
@@ -335,7 +401,14 @@ export async function handleApiPayroll(req) {
         approver_id: userId,
         approval_date: new Date().toISOString(),
       });
-      return { success: true, data: updated, message: 'Leave request rejected' };
+      const emp = await getUserById(
+        normalizeMobileUserId(updated.employee_id) || updated.employee_id
+      );
+      return {
+        success: true,
+        data: formatLeaveRequestForMobile(updated, employeeDisplayName(emp)),
+        message: 'Leave request rejected',
+      };
     }
 
     // ==================== PAY ITEM TYPE ====================

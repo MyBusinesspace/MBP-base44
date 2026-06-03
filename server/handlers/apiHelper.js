@@ -1,6 +1,11 @@
 import { listEntities, getEntity } from '../entityStore.js';
 import { getUserById } from '../userPersistence.js';
 import { normalizeMobileUserId } from '../utils/mobileUserId.js';
+import {
+  resolveEmployeeIdAliases,
+  employeeIdMatches,
+  formatLeaveRequestForMobile,
+} from '../utils/employeeIdAliases.js';
 import { isAdmin as userIsAdmin } from '../routes/mobileAuth.js';
 
 function fail(message, status = 400) {
@@ -146,10 +151,15 @@ async function handleAppInit(currentUser, admin, date) {
   const totalExpenses = pc.filter((e) => e.type === 'expense').reduce((sum, e) => sum + Math.abs(e.amount || 0), 0);
   const totalInputs = pc.filter((e) => e.type === 'input').reduce((sum, e) => sum + (e.amount || 0), 0);
 
-  const leavesRaw = leaveRequests.filter((l) => (admin ? true : l.employee_id === currentUser.id));
-  const sortedLeaves = [...leavesRaw].sort(
-    (a, b) => new Date(b.created_date) - new Date(a.created_date)
+  const leaveAliases = admin ? null : await resolveEmployeeIdAliases(currentUser);
+  const leavesRaw = leaveRequests.filter((l) =>
+    admin ? true : employeeIdMatches(l.employee_id, leaveAliases)
   );
+  const sortedLeaves = [...leavesRaw]
+    .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
+    .map((l) =>
+      formatLeaveRequestForMobile(l, userMap[l.employee_id] || 'Unknown', currentUser.id)
+    );
 
   return {
     success: true,
@@ -190,8 +200,8 @@ async function handleAppInit(currentUser, admin, date) {
       },
       leaves: {
         count: sortedLeaves.length,
-        pending: sortedLeaves.filter((l) => l.status === 'Pending').length,
-        approved: sortedLeaves.filter((l) => l.status === 'Approved').length,
+        pending: sortedLeaves.filter((l) => String(l.status).toLowerCase() === 'pending').length,
+        approved: sortedLeaves.filter((l) => String(l.status).toLowerCase() === 'approved').length,
         items: sortedLeaves.slice(0, 10),
       },
     },
