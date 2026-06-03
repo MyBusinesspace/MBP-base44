@@ -2,7 +2,7 @@
  * Vercel Serverless entry — export Express app (native support, no serverless-http).
  * @see https://vercel.com/docs/frameworks/backend/express
  */
-export const API_BUILD_ID = '2026-05-22-user-persist-v5';
+export const API_BUILD_ID = '2026-06-03-apiQuickTasks-v1';
 import express from 'express';
 import { createApp } from '../server/app.js';
 import { initDatabase } from '../server/db.js';

@@ -22,8 +22,21 @@ const mobileHandlers = {
 };
 
 function functionNameFromReq(req) {
-  const p = (req.path || req.url || '').split('?')[0];
-  return p.replace(/^\//, '');
+  const raw = (req.path || req.url || '').split('?')[0].replace(/\/+$/, '');
+  const segments = raw.replace(/^\//, '').split('/').filter(Boolean);
+  const fnIdx = segments.findIndex((s) => s.toLowerCase() === 'functions');
+  if (fnIdx >= 0 && segments[fnIdx + 1]) {
+    return segments.slice(fnIdx + 1).join('/');
+  }
+  return segments[segments.length - 1] || raw.replace(/^\//, '');
+}
+
+function resolveMobileHandler(fn) {
+  if (!fn) return null;
+  if (mobileHandlers[fn]) return mobileHandlers[fn];
+  const lower = fn.toLowerCase();
+  const key = Object.keys(mobileHandlers).find((k) => k.toLowerCase() === lower);
+  return key ? mobileHandlers[key] : null;
 }
 
 async function runHandler(req, res, handler, { isMobile = false } = {}) {
@@ -55,14 +68,26 @@ router.use(async (req, res) => {
     return res.status(404).json(withData({ error: 'Function name required', success: false }));
   }
 
-  const mobile = mobileHandlers[fn];
+  // Support /functions/apiQuickTasks/create → fn=apiQuickTasks, action=create
+  let functionName = fn;
+  let pathAction = null;
+  if (fn.includes('/')) {
+    const parts = fn.split('/').filter(Boolean);
+    functionName = parts[0];
+    pathAction = parts[1] || null;
+    if (pathAction && !req.query?.action) {
+      req.query = { ...req.query, action: pathAction };
+    }
+  }
+
+  const mobile = resolveMobileHandler(functionName);
   if (mobile) {
     return runHandler(req, res, mobile, { isMobile: true });
   }
 
-  const handler = functionHandlers[fn];
+  const handler = functionHandlers[functionName] || functionHandlers[fn];
   if (!handler) {
-    console.warn(`[functions] Unimplemented: ${fn} (${req.method})`);
+    console.warn(`[functions] Unimplemented: ${functionName || fn} (${req.method}) path=${req.path}`);
     return res.json(
       withData({
         success: true,

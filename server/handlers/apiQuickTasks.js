@@ -144,24 +144,33 @@ async function handleGet(req) {
   return { success: true, data: enriched };
 }
 
-async function handleCreate(body) {
-  if (!body?.title) return fail('title is required', 400);
+async function handleCreate(body, currentUser) {
+  const payload = { ...body };
+  delete payload.action;
+
+  if (!payload?.title) return fail('title is required', 400);
+
+  let assigned = payload.assigned_to_user_ids || [];
+  if (!assigned.length && currentUser?.id) {
+    assigned = [currentUser.id];
+  }
+  assigned = assigned.map((id) => normalizeMobileUserId(id) || id);
 
   const newTask = await createEntity('QuickTask', {
-    title: body.title,
-    description: body.description || '',
-    customer_id: body.customer_id || null,
-    status: body.status || 'open',
-    is_draft: body.is_draft || false,
-    department_id: body.department_id || null,
-    assigned_to_user_ids: body.assigned_to_user_ids || [],
-    working_on_by_user_ids: body.working_on_by_user_ids || [],
-    assigned_to_team_ids: body.assigned_to_team_ids || [],
-    due_date: body.due_date || null,
-    location: body.location || '',
-    subtasks: body.subtasks || [],
-    archived: body.archived || false,
-    document_urls: body.document_urls || [],
+    title: payload.title,
+    description: payload.description || '',
+    customer_id: payload.customer_id || null,
+    status: payload.status || 'open',
+    is_draft: payload.is_draft || false,
+    department_id: payload.department_id || null,
+    assigned_to_user_ids: assigned,
+    working_on_by_user_ids: payload.working_on_by_user_ids || [],
+    assigned_to_team_ids: payload.assigned_to_team_ids || [],
+    due_date: payload.due_date || null,
+    location: payload.location || '',
+    subtasks: payload.subtasks || [],
+    archived: payload.archived || false,
+    document_urls: payload.document_urls || [],
   });
 
   const [enriched] = await enrichTasks([newTask]);
@@ -275,8 +284,12 @@ async function handleBulkArchive(body) {
 
 export async function handleApiQuickTasks(req) {
   const method = req.method?.toUpperCase();
-  const action = normAction(req.query?.action);
-  const body = req.body || {};
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const action = normAction(
+    req.query?.action ||
+      body?.action ||
+      (method === 'POST' && body?.title && !req.query?.action && !body?.action ? 'create' : '')
+  );
 
   const currentUser = await resolveUser(req);
   if (!currentUser) {
@@ -299,7 +312,7 @@ export async function handleApiQuickTasks(req) {
     }
 
     if (action === 'create' && (method === 'POST' || method === 'PUT')) {
-      return await handleCreate(body);
+      return await handleCreate(body, currentUser);
     }
 
     if (
