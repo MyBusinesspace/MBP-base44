@@ -355,12 +355,67 @@ async function handleClockOut(userId, body) {
     }
   }
 
+  const workOrderId =
+    work_order_id ||
+    segments[segments.length - 1]?.work_order_id ||
+    body?.work_order_id;
+
+  let workOrderUpdated = false;
+  let workOrder = null;
+
+  if (workOrderId) {
+    try {
+      const woUpdate = {
+        is_active: false,
+        end_time: clockOutTime.toISOString(),
+        end_coords: normalizeCoords(clock_out_coords) || null,
+        end_address: clock_out_address || null,
+        duration_minutes: totalDurationMinutes,
+      };
+      if (status) {
+        woUpdate.status = status;
+        woUpdate.completed_date = clockOutTime.toISOString();
+      }
+      workOrder = await updateEntity('TimeEntry', workOrderId, woUpdate);
+      workOrderUpdated = true;
+
+      // Sync task status on the work order when mobile sends status (e.g. completed)
+      if (status && Array.isArray(workOrder.tasks)) {
+        workOrder.tasks = workOrder.tasks.map((t) => ({
+          ...t,
+          status: status === 'completed' ? 'completed' : t.status,
+        }));
+        await updateEntity('TimeEntry', workOrderId, { tasks: workOrder.tasks });
+      }
+    } catch (err) {
+      console.warn('[apiTimeTracker] TimeEntry update on clock-out:', err.message);
+    }
+  }
+
+  // Shape compatible with Base44 mobile client expectations
+  const timesheetPayload = {
+    ...updatedTimesheet,
+    notes: updatedTimesheet.notes ?? null,
+    approval_notes: updatedTimesheet.approval_notes ?? null,
+    department_id: updatedTimesheet.department_id ?? null,
+    regular_hours_calculated: updatedTimesheet.regular_hours_calculated ?? null,
+    overtime_hours_non_paid_calculated: updatedTimesheet.overtime_hours_non_paid_calculated ?? null,
+    overtime_hours_paid_calculated: updatedTimesheet.overtime_hours_paid_calculated ?? null,
+    clock_in_photo_url: updatedTimesheet.clock_in_photo_url ?? null,
+    clock_out_photo_url: updatedTimesheet.clock_out_photo_url ?? null,
+    switch_photo_urls: updatedTimesheet.switch_photo_urls ?? [],
+    was_edited: updatedTimesheet.was_edited ?? false,
+  };
+
   return {
     success: true,
-    data: updatedTimesheet,
     message: 'Clocked out successfully',
+    data: {
+      timesheet: timesheetPayload,
+      work_order_updated: workOrderUpdated,
+      work_order: workOrder,
+    },
   };
-}
 
 async function handleAddTrackingPoint(userId, body) {
   const { lat, lon } = body || {};
