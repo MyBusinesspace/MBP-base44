@@ -12,6 +12,8 @@ import integrationRoutes from './routes/integrations.js';
 import authRoutes from './routes/auth.js';
 import { env } from './config/env.js';
 import { getUploadsDir, ensureUploadsDir } from './utils/uploadsPath.js';
+import { serveUpload } from './routes/uploads.js';
+import { isSupabaseStorageConfigured } from './utils/storeUpload.js';
 
 export function createApp() {
   const APP_ID = process.env.VITE_APP_ID || 'mpb-local';
@@ -23,9 +25,8 @@ export function createApp() {
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true }));
-  if (uploadsDir) {
-    app.use('/uploads', express.static(uploadsDir));
-  }
+  // Dynamic handler: local disk + Supabase proxy (static alone fails on Vercel serverless /tmp).
+  app.get(/^\/uploads\/(.+)$/, serveUpload);
 
   app.get('/', (_req, res) => {
     res.type('html').send(`<!DOCTYPE html>
@@ -112,6 +113,11 @@ export function createApp() {
       ...getEmailDiagnostics(),
       jwt: Boolean(env.jwtSecret && env.jwtSecret !== 'mpb-local-dev-secret-change-me'),
       web_url: env.webUrl,
+      uploads_storage: isSupabaseStorageConfigured()
+        ? 'supabase'
+        : env.isVercel
+          ? 'missing_supabase_config'
+          : 'local_disk',
     });
   });
 

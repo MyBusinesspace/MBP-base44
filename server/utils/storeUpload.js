@@ -40,6 +40,12 @@ export async function storeUpload({ buffer, mimetype, originalname, prefix = '' 
   const ext = safeExt(originalname, mimetype);
   const filename = `${randomUUID()}${ext}`;
 
+  if (env.isVercel && !isSupabaseStorageConfigured()) {
+    throw new Error(
+      'Persistent uploads on Vercel require SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_STORAGE_BUCKET. Add them in Vercel Environment Variables and redeploy.'
+    );
+  }
+
   // Prefer Supabase Storage when configured (persistent across serverless invocations).
   if (isSupabaseStorageConfigured()) {
     const objectPath = joinUrlPath([prefix, filename]);
