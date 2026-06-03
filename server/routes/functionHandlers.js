@@ -158,6 +158,9 @@ export const functionHandlers = {
   processInvitation: handleProcessInvitation,
   repairEmployeeDocumentTypes: async () => ({ success: true, repaired: 0 }),
   assignAllUsersToRedcrane: async () => ({ success: true }),
-  approveLeaveRequest: async () => ({ success: true }),
+  approveLeaveRequest: async (body, req) => {
+    const { handleApproveLeaveRequest } = await import('../handlers/approveLeaveRequest.js');
+    return handleApproveLeaveRequest(body, req);
+  },
   resolveShortUrl: async (body) => ({ resolved_url: body?.url || null }),
 };
