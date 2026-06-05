@@ -417,6 +417,124 @@ async function handleAddTrackingPoint(userId, body) {
   return { success: true, data: updatedTimesheet, message: 'Tracking point added' };
 }
 
+async function handleGetAllTimesheetsSessions() {
+  const today = new Date().toISOString().split('T')[0];
+
+  let timesheets = await listEntities('TimesheetEntry', {
+    sort: '-clock_in_time',
+    limit: 2000,
+  });
+
+  timesheets = timesheets.filter(
+    (ts) => ts.clock_in_time && String(ts.clock_in_time).startsWith(today)
+  );
+
+  const sessionCountMap = {};
+  const employeeIds = new Set();
+  for (const ts of timesheets) {
+    sessionCountMap[ts.employee_id] = (sessionCountMap[ts.employee_id] || 0) + 1;
+    if (ts.employee_id) employeeIds.add(ts.employee_id);
+  }
+
+  const workOrderIds = [
+    ...new Set(
+      timesheets.flatMap((ts) =>
+        (ts.work_order_segments || []).map((s) => s.work_order_id).filter(Boolean)
+      )
+    ),
+  ];
+
+  const [allWorkOrders, allUsers] = await Promise.all([
+    workOrderIds.length
+      ? listEntities('TimeEntry', { limit: 5000 }).then((rows) =>
+          rows.filter((w) => workOrderIds.includes(w.id))
+        )
+      : Promise.resolve([]),
+    listEntities('User', { limit: 5000 }),
+  ]);
+
+  const employeeMap = {};
+  for (const eid of employeeIds) {
+    const user =
+      allUsers.find((u) => u.id === eid) || (await getUserById(eid));
+    if (user) employeeMap[eid] = stripSensitiveUser(user);
+  }
+
+  const workOrderMap = Object.fromEntries(allWorkOrders.map((wo) => [wo.id, wo]));
+
+  const projectIds = [...new Set(allWorkOrders.map((wo) => wo.project_id).filter(Boolean))];
+  const equipmentIds = [
+    ...new Set(
+      allWorkOrders.flatMap((wo) => {
+        const ids = [];
+        if (wo.equipment_id) ids.push(wo.equipment_id);
+        if (Array.isArray(wo.equipment_ids)) ids.push(...wo.equipment_ids);
+        return ids;
+      })
+    ),
+  ];
+
+  const [allProjects, allEquipments] = await Promise.all([
+    projectIds.length
+      ? listEntities('Project', { limit: 2000 }).then((rows) =>
+          rows.filter((p) => projectIds.includes(p.id))
+        )
+      : Promise.resolve([]),
+    equipmentIds.length
+      ? listEntities('ClientEquipment', { limit: 2000 }).then((rows) =>
+          rows.filter((e) => equipmentIds.includes(e.id))
+        )
+      : Promise.resolve([]),
+  ]);
+
+  const projectMap = Object.fromEntries(allProjects.map((p) => [p.id, p]));
+  const equipmentMap = Object.fromEntries(allEquipments.map((e) => [e.id, e]));
+
+  const customerIds = [...new Set(allProjects.map((p) => p.customer_id).filter(Boolean))];
+  const allCustomers =
+    customerIds.length > 0
+      ? await listEntities('Customer', { limit: 2000 }).then((rows) =>
+          rows.filter((c) => customerIds.includes(c.id))
+        )
+      : [];
+  const customerMap = Object.fromEntries(allCustomers.map((c) => [c.id, c]));
+
+  const totalEmployeesCount = allUsers.filter((u) => u.archived !== true).length;
+
+  const enriched = timesheets.map((ts) => ({
+    ...ts,
+    employee: employeeMap[ts.employee_id] || null,
+    session: sessionCountMap[ts.employee_id] || 0,
+    work_order_segments: (ts.work_order_segments || []).map((seg) => {
+      const workOrder = workOrderMap[seg.work_order_id] || null;
+      const project = workOrder?.project_id ? projectMap[workOrder.project_id] : null;
+      const customer = project?.customer_id ? customerMap[project.customer_id] : null;
+      const eqId =
+        workOrder?.equipment_id ||
+        (Array.isArray(workOrder?.equipment_ids) ? workOrder.equipment_ids[0] : null);
+      const equipment = eqId ? equipmentMap[eqId] : null;
+
+      return {
+        ...seg,
+        work_order_title: workOrder?.title || null,
+        work_order_number: workOrder?.work_order_number || null,
+        work_order_project_name: project?.name || null,
+        work_order_customer_name: customer?.name || null,
+        work_order_equipment_name: equipment?.name || null,
+        work_order_equipment_id: equipment?.id || null,
+        work_order_raw: workOrder || null,
+      };
+    }),
+  }));
+
+  return {
+    success: true,
+    data: enriched,
+    count: enriched.length,
+    total_employees_count: totalEmployeesCount,
+  };
+}
+
 export async function handleApiTimeTracker(req) {
   const method = req.method?.toUpperCase();
   const action = normAction(req.query?.action);
@@ -439,6 +557,15 @@ export async function handleApiTimeTracker(req) {
     try {
       return await handleGetActiveTimesheet(userId);
     } catch (e) {
+      return fail(e.message, 500);
+    }
+  }
+
+  if (method === 'GET' && actionIs(action, 'getAllTimesheetsSessions')) {
+    try {
+      return await handleGetAllTimesheetsSessions();
+    } catch (e) {
+      console.error('[apiTimeTracker] getAllTimesheetsSessions', e.message);
       return fail(e.message, 500);
     }
   }
