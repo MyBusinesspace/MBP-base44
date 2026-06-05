@@ -325,6 +325,30 @@ async function getWorkOrderById(req, _user) {
   return { success: true, data: wo };
 }
 
+/** Base44 get-shift-types: list or get one ShiftType. */
+async function getShiftTypes(req) {
+  const id = req.query?.id;
+  const branchId = req.query?.branch_id;
+
+  if (id) {
+    let shiftType;
+    try {
+      shiftType = await getEntity('ShiftType', id);
+    } catch {
+      const err = new Error('Shift type not found');
+      err.status = 404;
+      throw err;
+    }
+    return { success: true, data: shiftType };
+  }
+
+  const query = branchId ? { branch_id: branchId } : {};
+  const shiftTypes = await listEntities('ShiftType', { query, sort: 'sort_order', limit: 1000 });
+  const sorted = [...shiftTypes].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  return { success: true, count: sorted.length, data: sorted };
+}
+
 async function getTaskReport(req) {
   const taskId = req.query?.taskId || req.query?.task_id;
   if (!taskId) {
@@ -694,6 +718,13 @@ export async function handleWorkOrders(req) {
 
   if (method === 'GET' && eqCI(a, 'getTaskReport')) {
     return getTaskReport(req);
+  }
+
+  if (
+    method === 'GET' &&
+    (eqCI(a, 'get-shift-types') || eqCI(a, 'getShiftTypes') || eqCI(a, 'get_shift_types'))
+  ) {
+    return getShiftTypes(req);
   }
 
   if (method === 'GET' && eqCI(a, 'generatePdf')) {
